@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square } from 'lucide-react';
+import { Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square, AlertCircle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeEditor from './ThemeEditor';
 
@@ -61,6 +61,18 @@ export default function App() {
   const [showPlaylistPopup, setShowPlaylistPopup] = useState(false);
   const [quality, setQuality] = useState('Best');
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    update_available: boolean;
+    ytdlp_update: boolean;
+    ytdlp_current: string;
+    ytdlp_latest: string;
+    app_update: boolean;
+    app_current: string;
+    app_latest: string;
+    app_release_url: string;
+    message: string;
+  } | null>(null);
+  const [showUpdatePopup, setShowUpdatePopup] = useState(true);
   
   const [historyItems, setHistoryItems] = useState<{date: string, filename: string}[]>([]);
 
@@ -71,12 +83,28 @@ export default function App() {
 
   useEffect(() => { fetchHistory(); }, []);
 
+  // Automatic Background Startup Update Check (both yt-dlp and LeviDownloader)
   useEffect(() => {
+    let attempts = 0;
     const checkUpdate = async () => {
       try {
-        setUpdateAvailable(false); 
+        const res = await fetch('/api/check_updates');
+        const data = await res.json();
+        if (data && data.checked) {
+          setUpdateInfo(data);
+          if (data.update_available) {
+            setUpdateAvailable(true);
+            setShowUpdatePopup(true);
+          }
+        } else if (attempts < 5) {
+          attempts++;
+          setTimeout(checkUpdate, 1500);
+        }
       } catch (e) {
-        console.error("Failed to check for updates");
+        if (attempts < 5) {
+          attempts++;
+          setTimeout(checkUpdate, 2000);
+        }
       }
     };
     checkUpdate();
@@ -243,6 +271,10 @@ export default function App() {
                   customName={customName}
                   setCustomName={setCustomName}
                   fetchHistory={fetchHistory}
+                  updateAvailable={updateAvailable}
+                  updateInfo={updateInfo}
+                  showUpdatePopup={showUpdatePopup}
+                  setShowUpdatePopup={setShowUpdatePopup}
                 />
               </motion.div>
             )}
@@ -297,6 +329,41 @@ export default function App() {
             <span className="uppercase tracking-widest pl-[0.1em]">Log</span>
           </button>
         </div>
+
+        {/* Update Available Notification Popup */}
+        <AnimatePresence>
+          {updateAvailable && showUpdatePopup && activeView === 'main' && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="absolute top-6 right-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-3xl border border-amber-500/20 shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[380px]"
+              style={{ backgroundColor: `${theme.panelOuter}f2`, color: theme.textMain, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 36px rgba(0,0,0,0.4)` }}
+            >
+              <div className="flex items-center justify-between gap-4 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                  </div>
+                  <span className="font-bold tracking-wide text-lg text-white">Update Available</span>
+                </div>
+                <button onClick={() => setShowUpdatePopup(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
+              </div>
+              <p className="text-sm font-medium relative z-10 leading-relaxed" style={{ color: theme.textSecondary }}>
+                {updateInfo?.message || "A new update is available for yt-dlp engine or Levi's YouTube Downloader. Click below to install."}
+              </p>
+              <button
+                 onClick={() => { setShowUpdatePopup(false); handleUpdate(); }}
+                 className="mt-2 font-bold py-2.5 px-4 rounded-2xl transition-all active:translate-y-[2px] flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                 style={{ backgroundColor: theme.accent, color: '#ffffff', boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 rgba(0,0,0,0.3)` }}
+              >
+                <RefreshCcw size={16} />
+                <span>Update Tool Now</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Download Error Notification Popup */}
         <AnimatePresence>
@@ -354,7 +421,7 @@ export default function App() {
   );
 }
 
-function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, setDownloadError, customName, setCustomName, fetchHistory }: any) {
+function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, setDownloadError, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, showUpdatePopup, setShowUpdatePopup }: any) {
   const [progress, setProgress] = useState(0);
   const [downloadTitle, setDownloadTitle] = useState('Preparing...');
 
@@ -485,7 +552,16 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
         <button onClick={() => setActiveView('prename')} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><PenLine size={20} /><span className="relative z-10">Prename File</span></button>
         <div className="flex justify-center gap-[24px]">
           <button onClick={changeDownloadFolder} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><FolderOpen size={20} /><span className="relative z-10">Change Folder</span></button>
-          <button onClick={handleUpdate} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><RefreshCcw size={20} /><span className="relative z-10">Update Tool</span></button>
+          <button onClick={handleUpdate} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: updateAvailable ? `${theme.accent}2b` : theme.btnDarkBg, borderColor: updateAvailable ? `${theme.accent}80` : 'rgba(255,255,255,0.05)', color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}>
+            {updateAvailable && (
+              <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+            )}
+            <RefreshCcw size={20} className={updateAvailable ? "text-amber-400 animate-spin-slow" : ""} />
+            <span className="relative z-10">{updateAvailable ? "Update Available" : "Update Tool"}</span>
+          </button>
         </div>
       </motion.div>
     </motion.div>

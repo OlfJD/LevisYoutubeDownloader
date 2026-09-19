@@ -30,7 +30,117 @@ USER_DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
 COOKIES_NEW = os.path.join(USER_DOWNLOADS, "youtube.com_cookies.txt")
 
 # Hardcoded Local Version for GitHub Checks
-CURRENT_VERSION = "v1.0.0"
+CURRENT_VERSION = "v1.0.1"
+
+# Cached Update Status
+cached_update_info = {
+    "update_available": False,
+    "ytdlp_update": False,
+    "ytdlp_current": "",
+    "ytdlp_latest": "",
+    "app_update": False,
+    "app_current": CURRENT_VERSION,
+    "app_latest": "",
+    "app_release_url": "",
+    "message": "",
+    "checked": False
+}
+
+def get_installed_ytdlp_version():
+    try:
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        
+        exe_path = YTDLP_EXE
+        if not os.path.exists(exe_path):
+            exe_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "yt-dlp.exe")
+        
+        if os.path.exists(exe_path):
+            res = subprocess.run(
+                [exe_path, "--version"],
+                capture_output=True,
+                text=True,
+                startupinfo=startupinfo,
+                timeout=5
+            )
+            if res.returncode == 0:
+                return res.stdout.strip()
+    except Exception as e:
+        app_logs.append(f"Could not get yt-dlp version: {e}")
+    return ""
+
+def is_newer_version(remote_ver, local_ver):
+    if not remote_ver or not local_ver:
+        return False
+    try:
+        r_parts = [int(x) for x in re.findall(r'\d+', str(remote_ver))]
+        l_parts = [int(x) for x in re.findall(r'\d+', str(local_ver))]
+        return r_parts > l_parts
+    except Exception:
+        return str(remote_ver).strip() != str(local_ver).strip()
+
+def check_all_updates_worker():
+    global cached_update_info
+    ytdlp_has_update = False
+    app_has_update = False
+    ytdlp_curr = get_installed_ytdlp_version()
+    ytdlp_latest = ""
+    app_latest = ""
+    app_url = ""
+    reasons = []
+
+    # 1. Check yt-dlp GitHub release
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest",
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode())
+                ytdlp_latest = data.get("tag_name", "").strip()
+                if ytdlp_curr and ytdlp_latest and is_newer_version(ytdlp_latest, ytdlp_curr):
+                    ytdlp_has_update = True
+                    reasons.append(f"yt-dlp Core Engine ({ytdlp_curr} -> {ytdlp_latest})")
+    except Exception as e:
+        app_logs.append(f"yt-dlp update check skipped/failed: {e}")
+
+    # 2. Check Levi's YouTube Downloader GitHub release
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/OlfJD/LevisYoutubeDownloader/releases/latest",
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode())
+                app_latest = data.get("tag_name", CURRENT_VERSION).strip()
+                app_url = data.get("html_url", "")
+                if app_latest and is_newer_version(app_latest, CURRENT_VERSION):
+                    app_has_update = True
+                    reasons.append(f"Levi's YouTube Downloader ({CURRENT_VERSION} -> {app_latest})")
+    except Exception as e:
+        app_logs.append(f"LeviDownloader update check skipped/failed: {e}")
+
+    msg = ""
+    if reasons:
+        msg = f"Update available for {', '.join(reasons)}! Click 'Update Tool' to install."
+
+    cached_update_info = {
+        "update_available": ytdlp_has_update or app_has_update,
+        "ytdlp_update": ytdlp_has_update,
+        "ytdlp_current": ytdlp_curr,
+        "ytdlp_latest": ytdlp_latest,
+        "app_update": app_has_update,
+        "app_current": CURRENT_VERSION,
+        "app_latest": app_latest,
+        "app_release_url": app_url,
+        "message": msg,
+        "checked": True
+    }
+
 
 # Global Variables
 app_logs = []
@@ -157,6 +267,13 @@ def api_close():
         return jsonify({"success": True})
     return jsonify({"success": False})
 
+@app.route('/api/check_updates', methods=['GET'])
+def api_check_updates():
+    if not cached_update_info["checked"]:
+        threading.Thread(target=check_all_updates_worker).start()
+        time.sleep(0.3)
+    return jsonify(cached_update_info)
+
 @app.route('/api/update', methods=['POST'])
 def api_update():
     def run_update():
@@ -192,6 +309,9 @@ def api_update():
             
         app_logs.append(" ")
         app_logs.append("Process Finished Successfully!")
+        
+        # Refresh cached update status after update run
+        check_all_updates_worker()
     
     threading.Thread(target=run_update).start()
     return jsonify({"success": True})
@@ -336,6 +456,7 @@ def start_flask():
 
 if __name__ == '__main__':
     initialize_assets()  # Extract tools automatically
+    threading.Thread(target=check_all_updates_worker, daemon=True).start()
     threading.Thread(target=start_flask, daemon=True).start()
     
     window = webview.create_window(
