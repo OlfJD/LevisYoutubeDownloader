@@ -84,30 +84,48 @@ export default function App() {
   useEffect(() => { fetchHistory(); }, []);
 
   // Automatic Background Startup Update Check (both yt-dlp and LeviDownloader)
+  const checkUpdates = async (force: boolean = false) => {
+    try {
+      const res = await fetch(`/api/check_updates${force ? '?force=true' : ''}`);
+      const data = await res.json();
+      if (data && data.checked) {
+        setUpdateInfo(data);
+        setUpdateAvailable(Boolean(data.update_available));
+        if (data.update_available) {
+          setShowUpdatePopup(true);
+        } else {
+          setShowUpdatePopup(false);
+        }
+      }
+    } catch (e) {
+      console.log("Update check error:", e);
+    }
+  };
+
   useEffect(() => {
     let attempts = 0;
-    const checkUpdate = async () => {
+    const initialCheck = async () => {
       try {
         const res = await fetch('/api/check_updates');
         const data = await res.json();
         if (data && data.checked) {
           setUpdateInfo(data);
+          setUpdateAvailable(Boolean(data.update_available));
           if (data.update_available) {
-            setUpdateAvailable(true);
             setShowUpdatePopup(true);
           }
         } else if (attempts < 5) {
           attempts++;
-          setTimeout(checkUpdate, 1500);
+          setTimeout(initialCheck, 1500);
         }
       } catch (e) {
         if (attempts < 5) {
           attempts++;
-          setTimeout(checkUpdate, 2000);
+          setTimeout(initialCheck, 2000);
         }
       }
     };
-    checkUpdate();
+    initialCheck();
   }, []);
 
   useEffect(() => {
@@ -299,7 +317,12 @@ export default function App() {
                 transition={{ duration: 0.15 }}
                 className="w-full flex justify-center"
               >
-                <UpdateView theme={theme} setActiveView={setActiveView} />
+                <UpdateView 
+                  theme={theme} 
+                  setActiveView={setActiveView} 
+                  checkUpdates={checkUpdates}
+                  setUpdateAvailable={setUpdateAvailable}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -637,7 +660,7 @@ function LogView({ theme }: { theme: any }) {
   );
 }
 
-function UpdateView({ theme, setActiveView }: { theme: any, setActiveView: (v: any) => void }) {
+function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: { theme: any, setActiveView: (v: any) => void, checkUpdates?: (force?: boolean) => void, setUpdateAvailable?: (v: boolean) => void }) {
   const [logs, setLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
   useEffect(() => {
@@ -647,7 +670,12 @@ function UpdateView({ theme, setActiveView }: { theme: any, setActiveView: (v: a
           setLogs(d);
           if (!done && d.some(l => l.includes('Process Finished Successfully!'))) {
             setDone(true);
-            setTimeout(() => { setActiveView('main'); }, 3000); 
+            if (setUpdateAvailable) setUpdateAvailable(false);
+            if (checkUpdates) checkUpdates(true);
+            setTimeout(() => { 
+              if (checkUpdates) checkUpdates(true);
+              setActiveView('main'); 
+            }, 2500); 
           }
         }
       }).catch(e => {});
@@ -655,7 +683,7 @@ function UpdateView({ theme, setActiveView }: { theme: any, setActiveView: (v: a
     fetchLogs();
     const interval = setInterval(fetchLogs, 500);
     return () => clearInterval(interval);
-  }, [done, setActiveView]);
+  }, [done, setActiveView, checkUpdates, setUpdateAvailable]);
 
   return (
     <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex flex-col mt-4" style={{ backgroundColor: theme.panelOuter }}>

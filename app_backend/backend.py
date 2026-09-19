@@ -269,9 +269,9 @@ def api_close():
 
 @app.route('/api/check_updates', methods=['GET'])
 def api_check_updates():
-    if not cached_update_info["checked"]:
-        threading.Thread(target=check_all_updates_worker).start()
-        time.sleep(0.3)
+    force = request.args.get('force', 'false').lower() == 'true'
+    if force or not cached_update_info["checked"]:
+        check_all_updates_worker()
     return jsonify(cached_update_info)
 
 @app.route('/api/update', methods=['POST'])
@@ -297,7 +297,7 @@ def api_update():
                     data = json.loads(response.read().decode())
                     latest_tag = data.get("tag_name", CURRENT_VERSION)
                     app_logs.append(f"Latest release found on GitHub: {latest_tag}")
-                    if latest_tag != CURRENT_VERSION:
+                    if latest_tag != CURRENT_VERSION and is_newer_version(latest_tag, CURRENT_VERSION):
                         app_logs.append("New update available!")
                         app_logs.append(f"Get the update at: {data.get('html_url')}")
                     else:
@@ -307,11 +307,11 @@ def api_update():
         except Exception as e:
             app_logs.append(f"GitHub Update check skipped/failed: {e}")
             
+        # Refresh cached update status immediately
+        check_all_updates_worker()
+        
         app_logs.append(" ")
         app_logs.append("Process Finished Successfully!")
-        
-        # Refresh cached update status after update run
-        check_all_updates_worker()
     
     threading.Thread(target=run_update).start()
     return jsonify({"success": True})
