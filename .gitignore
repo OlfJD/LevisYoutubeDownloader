@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build & Release outputs
+build/
+dist/
+release/
+old_backups/
+github_upload/
+*.zip
+
+# Binaries & Executables
+*.exe
+*.dll
+*.so
+*.dylib
+tools/*.exe
+**/tools/*.exe
+
+# App runtime user history
+**/history.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Environment and logs
+.env*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
