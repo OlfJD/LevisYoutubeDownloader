@@ -30,7 +30,7 @@ USER_DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
 COOKIES_NEW = os.path.join(USER_DOWNLOADS, "youtube.com_cookies.txt")
 
 # Hardcoded Local Version for GitHub Checks
-CURRENT_VERSION = "v1.0.1"
+CURRENT_VERSION = "v1.0.2"
 
 # Cached Update Status
 cached_update_info = {
