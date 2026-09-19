@@ -169,10 +169,10 @@ def api_update():
         app_logs.append("=== PART 2: Checking LeviDownloader Updates ===")
         app_logs.append(f"Current UI version: {CURRENT_VERSION}")
         
-        # Pointing to LeviHollow's active repository
+        # Pointing to OlfJD's active repository
         try:
             req = urllib.request.Request(
-                "https://api.github.com/repos/LeviHollow/LevisYoutubeDownloader/releases/latest",
+                "https://api.github.com/repos/OlfJD/LevisYoutubeDownloader/releases/latest",
                 headers={'User-Agent': 'Mozilla/5.0'}
             )
             with urllib.request.urlopen(req, timeout=5) as response:
