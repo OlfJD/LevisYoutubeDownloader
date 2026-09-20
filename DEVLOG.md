@@ -68,6 +68,10 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
+### **v1.0.3** (2026-09-20)
+- **Release**: Published version update to verify and test the in-app update notification modal, reactive status endpoints, and badge workflows.
+- **Engine**: Refreshed bundled web assets and distribution packages.
+
 ### **v1.0.2** (2026-09-19)
 - **Fix**: Resolved persistent "Update Available" badge by adding auto-reset state callback when `UpdateView` completes.
 - **Fix**: Synchronized `api_update()` to refresh `cached_update_info` prior to logging completion.
