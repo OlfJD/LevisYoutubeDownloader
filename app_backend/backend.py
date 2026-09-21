@@ -30,7 +30,7 @@ USER_DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
 COOKIES_NEW = os.path.join(USER_DOWNLOADS, "youtube.com_cookies.txt")
 
 # Hardcoded Local Version for GitHub Checks
-CURRENT_VERSION = "v1.0.3"
+CURRENT_VERSION = "v1.0.4"
 
 # Cached Update Status
 cached_update_info = {
@@ -77,9 +77,14 @@ def is_newer_version(remote_ver, local_ver):
     try:
         r_parts = [int(x) for x in re.findall(r'\d+', str(remote_ver))]
         l_parts = [int(x) for x in re.findall(r'\d+', str(local_ver))]
-        return r_parts > l_parts
+        if not r_parts or not l_parts:
+            return False
+        max_len = max(len(r_parts), len(l_parts))
+        r_padded = r_parts + [0] * (max_len - len(r_parts))
+        l_padded = l_parts + [0] * (max_len - len(l_parts))
+        return r_padded > l_padded
     except Exception:
-        return str(remote_ver).strip() != str(local_ver).strip()
+        return False
 
 def check_all_updates_worker():
     global cached_update_info
@@ -156,15 +161,33 @@ def initialize_assets():
     
     for exe_name in executables:
         target_exe = os.path.join(TOOLS_DIR, exe_name)
+        embedded_exe = None
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            embedded_exe = os.path.join(sys._MEIPASS, "tools", exe_name)
+        else:
+            local_tools = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", exe_name)
+            if os.path.exists(local_tools):
+                embedded_exe = local_tools
+
+        should_copy = False
         if not os.path.exists(target_exe):
-            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                embedded_exe = os.path.join(sys._MEIPASS, "tools", exe_name)
-                if os.path.exists(embedded_exe):
-                    try:
-                        shutil.copy(embedded_exe, target_exe)
-                        app_logs.append(f"Engine asset {exe_name} initialized.")
-                    except Exception as e:
-                        app_logs.append(f"Failed to copy {exe_name}: {e}")
+            should_copy = True
+        elif embedded_exe and os.path.exists(embedded_exe) and exe_name == "yt-dlp.exe":
+            try:
+                emb_res = subprocess.run([embedded_exe, "--version"], capture_output=True, text=True, timeout=5)
+                tgt_res = subprocess.run([target_exe, "--version"], capture_output=True, text=True, timeout=5)
+                if emb_res.returncode == 0 and tgt_res.returncode == 0:
+                    if is_newer_version(emb_res.stdout.strip(), tgt_res.stdout.strip()):
+                        should_copy = True
+            except Exception:
+                pass
+
+        if should_copy and embedded_exe and os.path.exists(embedded_exe):
+            try:
+                shutil.copy2(embedded_exe, target_exe)
+                app_logs.append(f"Engine asset {exe_name} initialized.")
+            except Exception as e:
+                app_logs.append(f"Failed to copy {exe_name}: {e}")
 
 def check_cookies():
     if os.path.exists(COOKIES_NEW):

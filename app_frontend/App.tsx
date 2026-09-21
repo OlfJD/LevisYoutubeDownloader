@@ -113,6 +113,8 @@ export default function App() {
           setUpdateAvailable(Boolean(data.update_available));
           if (data.update_available) {
             setShowUpdatePopup(true);
+          } else {
+            setShowUpdatePopup(false);
           }
         } else if (attempts < 5) {
           attempts++;

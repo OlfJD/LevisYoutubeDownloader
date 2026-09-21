@@ -68,6 +68,12 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
+### **v1.0.4** (2026-09-21)
+- **Fix**: Resolved false persistent "Update Available" notification on the Update Tool button by updating bundled `yt-dlp` core binary to the latest release (`2026.08.19`).
+- **Fix**: Upgraded version comparison algorithm with zero-padded numeric segment comparisons to prevent false update alerts across version representations.
+- **Engine**: Enhanced `initialize_assets()` to automatically upgrade local `%APPDATA%` tools when a newer bundled version is present.
+- **Frontend**: Explicitly synchronized initial update check states to ensure clean initial button and notification rendering.
+
 ### **v1.0.3** (2026-09-20)
 - **Release**: Published version update to verify and test the in-app update notification modal, reactive status endpoints, and badge workflows.
 - **Engine**: Refreshed bundled web assets and distribution packages.

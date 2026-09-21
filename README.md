@@ -4,11 +4,11 @@
 
 **A Modern, High-Speed YouTube & Media Downloader with Instant Format Conversion**
 
-[![Download Latest Release](https://img.shields.io/badge/Download-Latest_Release_(Windows)-F43F5E?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/OlfJD/LevisYoutubeDownloader/releases/latest/download/LevisYoutubeDownloader-v1.0.3-win-x64.zip)
+[![Download Latest Release](https://img.shields.io/badge/Download-Latest_Release_(Windows)-F43F5E?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/OlfJD/LevisYoutubeDownloader/releases/latest/download/LevisYoutubeDownloader-v1.0.4-win-x64.zip)
 [![GitHub Release](https://img.shields.io/github/v/release/OlfJD/LevisYoutubeDownloader?style=for-the-badge&color=10B981)](https://github.com/OlfJD/LevisYoutubeDownloader/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Windows_10_%2F_11-3B82F6?style=for-the-badge&logo=windows)](https://github.com/OlfJD/LevisYoutubeDownloader)
 
-### 📥 [👉 Click Here to Download Levi's YouTube Downloader (.zip)](https://github.com/OlfJD/LevisYoutubeDownloader/releases/latest/download/LevisYoutubeDownloader-v1.0.3-win-x64.zip)
+### 📥 [👉 Click Here to Download Levi's YouTube Downloader (.zip)](https://github.com/OlfJD/LevisYoutubeDownloader/releases/latest/download/LevisYoutubeDownloader-v1.0.4-win-x64.zip)
 
 *(Standalone portable Windows application — pre-bundled with download engine & converters)*
 
@@ -18,7 +18,7 @@
 
 ## ⚡ Quick Start for Users
 
-1. **[Download Levi's YouTube Downloader (.zip)](https://github.com/OlfJD/LevisYoutubeDownloader/releases/latest/download/LevisYoutubeDownloader-v1.0.3-win-x64.zip)**.
+1. **[Download Levi's YouTube Downloader (.zip)](https://github.com/OlfJD/LevisYoutubeDownloader/releases/latest/download/LevisYoutubeDownloader-v1.0.4-win-x64.zip)**.
 2. **Extract** the ZIP archive.
 3. Run **`LevisYoutubeDownloader.exe`**.
 4. Paste any YouTube/media URL, pick your desired format (MP4, MP3, etc.) and quality, and click **Download**!
