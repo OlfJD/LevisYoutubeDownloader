@@ -1732,8 +1732,11 @@ function SettingsView({
           </div>
         </div>
 
-        <div className="text-xs font-mono opacity-50 px-2 mt-2">
-          {isGifSection ? 'FFmpeg 2-Pass Palettegen Studio Core Active' : 'yt-dlp Core Universal Media Engine Active'}
+        <div className="flex items-center justify-between text-xs font-mono opacity-50 px-2 mt-2">
+          <span>{isGifSection ? 'FFmpeg 2-Pass Palettegen Studio Core Active' : 'yt-dlp Core Universal Media Engine Active'}</span>
+          <span className="font-bold tracking-wider opacity-80 px-2 py-0.5 rounded bg-white/5 border border-white/10" style={{ color: accentColor }}>
+            v1.1.0-dev
+          </span>
         </div>
       </div>
 
