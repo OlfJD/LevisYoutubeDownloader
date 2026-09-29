@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square, AlertCircle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeEditor from './ThemeEditor';
+import CustomDropdown from './CustomDropdown';
 
 // Native Drag-friendly Title Bar for Borderless Frame
 function CustomTitleBar({ theme }) {
@@ -600,13 +601,23 @@ function SettingsView({ theme, playlistMode, setPlaylistMode, quality, setQualit
         <h2 className="text-[34px] mb-8 font-medium text-center w-full" style={{ color: theme.textMain }}>Settings</h2>
         <div className="w-full flex flex-col gap-6 pl-2 mt-4">
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-start gap-4 mx-4">
-              <span className="text-[24px] whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
-              <div className="flex items-center pl-3 pr-2 py-1 rounded-lg text-[20px] min-w-[120px]" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText }}>
-                <div className="font-bold tracking-wide w-full text-center pr-3">{quality}</div>
-                <div className="w-[5px] h-[22px] rounded-full shrink-0" style={{ backgroundColor: theme.btnLightBorder }}></div>
-                <div className="relative flex items-center justify-center cursor-pointer pl-3 pr-2 w-[40px]"><ChevronDown size={28} strokeWidth={4} className="pointer-events-none" /><select value={quality} onChange={(e) => setQuality(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full font-bold text-[18px]"><option className="font-bold text-black bg-white">Best</option><option className="font-bold text-black bg-white">High</option><option className="font-bold text-black bg-white">Medium</option><option className="font-bold text-black bg-white">Low</option></select></div>
-              </div>
+            <div className="flex items-center justify-between mx-4">
+              <span className="text-[20px] whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
+              <CustomDropdown 
+                value={quality}
+                options={[
+                  { value: 'Best', label: 'Best Quality (4K / 1080p)', badge: 'Max' },
+                  { value: 'High', label: 'High Quality (1080p / 720p)' },
+                  { value: 'Medium', label: 'Medium Quality (480p)' },
+                  { value: 'Low', label: 'Low Quality (360p)' },
+                ]}
+                onChange={setQuality}
+                theme={theme}
+                variant="tactile-light"
+                size="md"
+                accentColor={theme.accent}
+                minWidth={160}
+              />
             </div>
             <div className="flex flex-col gap-6 mx-4 mt-6">
               <div className="flex items-center justify-between w-[320px]">

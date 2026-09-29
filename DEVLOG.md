@@ -68,6 +68,10 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
+### **v1.0.5** (2026-09-29)
+- **UI & Aesthetics**: Replaced standard white Windows OS `<select>` / `<option>` dropdown menus with custom tactile dark Obsidian Glass dropdown components (`CustomDropdown.tsx`).
+- **Interaction**: Added smooth animations, keyboard navigation, and responsive dropdown popovers matching the application's dark aesthetic.
+
 ### **v1.0.4** (2026-09-21)
 - **Fix**: Resolved false persistent "Update Available" notification on the Update Tool button by updating bundled `yt-dlp` core binary to the latest release (`2026.08.19`).
 - **Fix**: Upgraded version comparison algorithm with zero-padded numeric segment comparisons to prevent false update alerts across version representations.
