@@ -601,7 +601,7 @@ function SettingsView({ theme, playlistMode, setPlaylistMode, quality, setQualit
         <h2 className="text-[34px] mb-8 font-medium text-center w-full" style={{ color: theme.textMain }}>Settings</h2>
         <div className="w-full flex flex-col gap-6 pl-2 mt-4">
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between mx-4">
+            <div className="flex items-center justify-between gap-8 mx-4">
               <span className="text-[20px] whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
               <CustomDropdown 
                 value={quality}
@@ -616,7 +616,7 @@ function SettingsView({ theme, playlistMode, setPlaylistMode, quality, setQualit
                 variant="tactile-light"
                 size="md"
                 accentColor={theme.accent}
-                minWidth={160}
+                minWidth={170}
               />
             </div>
             <div className="flex flex-col gap-6 mx-4 mt-6">
