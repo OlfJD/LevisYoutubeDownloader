@@ -1593,7 +1593,7 @@ function SettingsView({
             ) : (
               <>
                 {/* 1. Standard Downloader Quality Custom Dropdown */}
-                <div className="flex items-center justify-between mx-2">
+                <div className="flex items-center justify-between gap-6 mx-2">
                   <span className="text-[16px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
                   <CustomDropdown 
                     value={quality}
@@ -1603,7 +1603,7 @@ function SettingsView({
                     variant="tactile-light"
                     size="md"
                     accentColor={accentColor}
-                    minWidth={160}
+                    minWidth={170}
                   />
                 </div>
 
