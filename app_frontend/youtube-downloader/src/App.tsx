@@ -672,9 +672,9 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, handleSwitc
   const displayTitle = customName ? `${customName} (Custom)` : downloadTitle;
 
   return (
-    <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8 my-auto">
+    <div className="w-[1050px] h-[580px] flex justify-center items-center relative">
       
-      {/* Stylized Floating Right Arrow to GIF Machine (Mimics Back button distance -right-16, Yellow Accent & Glow) */}
+      {/* Stylized Floating Right Arrow to GIF Machine (Copies exact horizontal coordinates of Back button) */}
       <div 
         className="absolute -right-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40" 
         onClick={handleSwitchToGif}
@@ -699,86 +699,88 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, handleSwitc
         </button>
       </div>
 
-      {/* Input Area with Inline Stop Button */}
-      <div className="w-full relative flex gap-3 h-[46px] items-center">
-        <div className="flex-1 flex h-full rounded-[10px] overflow-hidden p-[2px] shadow-inner relative z-10 transition-all" style={{ backgroundColor: theme.inputBg }}>
-          <input 
-            type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Twitter, Any Site)..." 
-            className="flex-1 bg-transparent px-4 py-[3px] outline-none font-medium placeholder:opacity-60 text-[19px] disabled:opacity-50 tracking-wide" style={{ color: theme.inputText }}
-          />
-          <div className="w-[3px] h-[28px] overflow-hidden rounded-full self-center ml-3 mr-1" style={{ backgroundColor: theme.inputText }}></div>
-          <button 
-            onClick={() => setUrl('')} disabled={!url || isDownloading}
-            className="flex items-center justify-center transition-all hover:opacity-70 active:translate-y-[4px] disabled:opacity-50 mr-2" style={{ color: theme.inputText }}
-          ><X size={34} strokeWidth={2.5} /></button>
-        </div>
+      <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8 my-auto">
+        {/* Input Area with Inline Stop Button */}
+        <div className="w-full relative flex gap-3 h-[46px] items-center">
+          <div className="flex-1 flex h-full rounded-[10px] overflow-hidden p-[2px] shadow-inner relative z-10 transition-all" style={{ backgroundColor: theme.inputBg }}>
+            <input 
+              type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Twitter, Any Site)..." 
+              className="flex-1 bg-transparent px-4 py-[3px] outline-none font-medium placeholder:opacity-60 text-[19px] disabled:opacity-50 tracking-wide" style={{ color: theme.inputText }}
+            />
+            <div className="w-[3px] h-[28px] overflow-hidden rounded-full self-center ml-3 mr-1" style={{ backgroundColor: theme.inputText }}></div>
+            <button 
+              onClick={() => setUrl('')} disabled={!url || isDownloading}
+              className="flex items-center justify-center transition-all hover:opacity-70 active:translate-y-[4px] disabled:opacity-50 mr-2" style={{ color: theme.inputText }}
+            ><X size={34} strokeWidth={2.5} /></button>
+          </div>
 
-        <AnimatePresence>
+          <AnimatePresence>
+            {isDownloading && (
+              <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 140, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="h-full overflow-hidden shrink-0 rounded-[10px]">
+                <button 
+                  onClick={handleStopProcess}
+                  className="w-full h-full flex items-center justify-center gap-2 font-bold text-white uppercase tracking-widest bg-[#E33] hover:bg-[#ff4444] transition-colors shadow-inner"
+                >
+                  <Square size={16} fill="currentColor" /> Stop
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        
+        {/* Waveform & Video Name */}
+        <AnimatePresence initial={false}>
           {isDownloading && (
-            <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 140, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="h-full overflow-hidden shrink-0 rounded-[10px]">
-              <button 
-                onClick={handleStopProcess}
-                className="w-full h-full flex items-center justify-center gap-2 font-bold text-white uppercase tracking-widest bg-[#E33] hover:bg-[#ff4444] transition-colors shadow-inner"
-              >
-                <Square size={16} fill="currentColor" /> Stop
-              </button>
+            <motion.div 
+              layout
+              initial={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }} 
+              animate={{ height: 50, opacity: 1, marginTop: 4, marginBottom: 4 }} 
+              exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="w-[98%] mx-auto relative flex justify-between items-center px-2 overflow-hidden shrink-0"
+            >
+              <div className="text-[20px] font-medium flex items-center gap-4 truncate max-w-[80%]" style={{ color: theme.textMain }}>
+                <span className="shrink-0">Downloading:</span> 
+                <span className="opacity-70 truncate" title={displayTitle}>{displayTitle}</span>
+                <span className="font-bold text-[22px] shrink-0 ml-2" style={{ color: theme.accent }}>{Math.round(progress)}%</span>
+              </div>
+              <div className="flex items-center gap-[4px] h-[36px]">
+                  {[...Array(12)].map((_, i) => (
+                    <motion.div key={i} className="w-[5px] rounded-full" style={{ backgroundColor: theme.accent }} animate={{ height: ['20%', '100%', '20%'] }} transition={{ duration: 0.5 + Math.random() * 0.5, repeat: Infinity, ease: "easeInOut", delay: Math.random() * 0.5 }} />
+                  ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
-      
-      {/* Waveform & Video Name */}
-      <AnimatePresence initial={false}>
-        {isDownloading && (
-          <motion.div 
-            layout
-            initial={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }} 
-            animate={{ height: 50, opacity: 1, marginTop: 4, marginBottom: 4 }} 
-            exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
-            transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="w-[98%] mx-auto relative flex justify-between items-center px-2 overflow-hidden shrink-0"
-          >
-            <div className="text-[20px] font-medium flex items-center gap-4 truncate max-w-[80%]" style={{ color: theme.textMain }}>
-              <span className="shrink-0">Downloading:</span> 
-              <span className="opacity-70 truncate" title={displayTitle}>{displayTitle}</span>
-              <span className="font-bold text-[22px] shrink-0 ml-2" style={{ color: theme.accent }}>{Math.round(progress)}%</span>
-            </div>
-            <div className="flex items-center gap-[4px] h-[36px]">
-                {[...Array(12)].map((_, i) => (
-                  <motion.div key={i} className="w-[5px] rounded-full" style={{ backgroundColor: theme.accent }} animate={{ height: ['20%', '100%', '20%'] }} transition={{ duration: 0.5 + Math.random() * 0.5, repeat: Infinity, ease: "easeInOut", delay: Math.random() * 0.5 }} />
-                ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {/* ORIGINAL 3 DOWNLOAD BUTTONS (MP3, MP4, WAV) */}
-      <motion.div layout className="flex flex-col items-center gap-6">
-        <div className="flex gap-8">
-          <button onClick={() => startRealDownload('mp3')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP3</span></button>
-          <button onClick={() => startRealDownload('mp4')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP4</span></button>
-        </div>
-        <button onClick={() => startRealDownload('wav')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download WAV</span></button>
-      </motion.div>
+        {/* ORIGINAL 3 DOWNLOAD BUTTONS (MP3, MP4, WAV) */}
+        <motion.div layout className="flex flex-col items-center gap-6">
+          <div className="flex gap-8">
+            <button onClick={() => startRealDownload('mp3')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP3</span></button>
+            <button onClick={() => startRealDownload('mp4')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP4</span></button>
+          </div>
+          <button onClick={() => startRealDownload('wav')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download WAV</span></button>
+        </motion.div>
 
-      {/* Bottom Action Buttons */}
-      <motion.div layout className="mt-20 flex flex-col items-center gap-[20px] w-[800px]">
-        <button onClick={() => setActiveView('prename')} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><PenLine size={20} /><span className="relative z-10">Prename File</span></button>
-        <div className="flex justify-center gap-[24px]">
-          <button onClick={changeDownloadFolder} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><FolderOpen size={20} /><span className="relative z-10">Change Folder</span></button>
-          <button onClick={handleUpdate} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: updateAvailable ? `${theme.accent}2b` : theme.btnDarkBg, borderColor: updateAvailable ? `${theme.accent}80` : 'rgba(255,255,255,0.05)', color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}>
-            {updateAvailable && (
-              <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-              </span>
-            )}
-            <RefreshCcw size={20} className={updateAvailable ? "text-amber-400 animate-spin-slow" : ""} />
-            <span className="relative z-10">{updateAvailable ? "Update Available" : "Update Tool"}</span>
-          </button>
-        </div>
+        {/* Bottom Action Buttons */}
+        <motion.div layout className="mt-20 flex flex-col items-center gap-[20px] w-[800px]">
+          <button onClick={() => setActiveView('prename')} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><PenLine size={20} /><span className="relative z-10">Prename File</span></button>
+          <div className="flex justify-center gap-[24px]">
+            <button onClick={changeDownloadFolder} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><FolderOpen size={20} /><span className="relative z-10">Change Folder</span></button>
+            <button onClick={handleUpdate} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: updateAvailable ? `${theme.accent}2b` : theme.btnDarkBg, borderColor: updateAvailable ? `${theme.accent}80` : 'rgba(255,255,255,0.05)', color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}>
+              {updateAvailable && (
+                <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                </span>
+              )}
+              <RefreshCcw size={20} className={updateAvailable ? "text-amber-400 animate-spin-slow" : ""} />
+              <span className="relative z-10">{updateAvailable ? "Update Available" : "Update Tool"}</span>
+            </button>
+          </div>
+        </motion.div>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
 
