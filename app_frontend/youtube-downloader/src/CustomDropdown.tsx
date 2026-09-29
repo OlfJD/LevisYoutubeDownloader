@@ -40,7 +40,7 @@ export default function CustomDropdown({
   accentColor,
   minWidth,
   className = '',
-  align = 'left',
+  align = 'right',
   dropUp = false,
 }: CustomDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -154,13 +154,13 @@ export default function CustomDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: dropUp ? 6 : -6, scale: 0.96 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className={`absolute z-[300] min-w-full w-max max-w-[340px] p-1.5 rounded-2xl shadow-2xl border backdrop-blur-2xl overflow-hidden ${
+            className={`absolute z-[300] min-w-[200px] w-max max-w-[380px] p-1.5 rounded-2xl shadow-2xl border backdrop-blur-2xl ${
               dropUp ? 'bottom-full mb-2' : 'top-full mt-2'
             } ${align === 'right' ? 'right-0' : 'left-0'}`}
             style={{
-              backgroundColor: `${theme?.panelOuter || '#292a34'}fa`,
-              borderColor: 'rgba(255,255,255,0.12)',
-              boxShadow: `0 16px 36px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.15)`,
+              backgroundColor: `${theme?.panelOuter || '#292a34'}f8`,
+              borderColor: 'rgba(255,255,255,0.14)',
+              boxShadow: `0 20px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.18)`,
             }}
           >
             <div className="max-h-60 overflow-y-auto custom-scrollbar flex flex-col gap-1 p-0.5">
