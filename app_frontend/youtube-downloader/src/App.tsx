@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { 
   Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square, 
   ChevronRight, ChevronLeft, Film, Sparkles, FolderCheck, HardDrive, 
-  History, Scissors, Volume2, Check, Video, Play, FileVideo, ArrowRight, ArrowLeft
+  History, Scissors, Volume2, Check, Video, Play, FileVideo, Sliders, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeEditor from './ThemeEditor';
@@ -265,7 +265,7 @@ export default function App() {
           </h1>
         </div>
 
-        {/* View Switcher Carousel / Container */}
+        {/* View Switcher Carousel / Container (Standardized Height for Perfect Arrow Alignment) */}
         <div className="flex-1 w-full max-w-5xl flex flex-col items-center px-4 relative mt-2">
           <AnimatePresence mode="wait">
             {activeView === 'main' && (
@@ -275,7 +275,7 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -25 }}
                 transition={{ duration: 0.18 }}
-                className="w-full flex justify-center relative"
+                className="w-full h-[580px] flex justify-center items-center relative"
               >
                 <MainView 
                   url={url} 
@@ -307,7 +307,7 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 25 }}
                 transition={{ duration: 0.18 }}
-                className="w-full flex justify-center relative"
+                className="w-full h-[580px] flex justify-center items-center relative"
               >
                 <AdvancedGifMachineView 
                   theme={theme}
@@ -330,7 +330,7 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="w-full flex justify-center"
+                className="w-full h-[580px] flex justify-center items-center"
               >
                 <SettingsView 
                   theme={theme} 
@@ -350,7 +350,7 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="w-full flex justify-center"
+                className="w-full h-[580px] flex justify-center items-center"
               >
                 <LogView theme={theme} />
               </motion.div>
@@ -363,7 +363,7 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="w-full flex justify-center"
+                className="w-full h-[580px] flex justify-center items-center"
               >
                 <UpdateView 
                   theme={theme} 
@@ -497,7 +497,7 @@ export default function App() {
 }
 
 // -------------------------------------------------------------
-// ORIGINAL PAGE 1 VIEW: Faithful 100% OG Layout + Stylized Right Arrow
+// ORIGINAL PAGE 1 VIEW: Faithful 100% OG Layout + Clean Stylized Right Arrow
 // -------------------------------------------------------------
 function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, setDownloadError, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, showUpdatePopup, setShowUpdatePopup }: any) {
   const [progress, setProgress] = useState(0);
@@ -557,15 +557,15 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
   const displayTitle = customName ? `${customName} (Custom)` : downloadTitle;
 
   return (
-    <motion.div layout className="w-full max-w-[840px] flex flex-col items-center relative gap-7">
+    <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8 my-auto">
       
-      {/* Stylized Floating Right Arrow to GIF Machine */}
+      {/* Stylized Floating Right Arrow to GIF Machine (Clean - No Star, Moved Further Right) */}
       <div 
-        className="absolute -right-20 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 group cursor-pointer z-40" 
+        className="absolute -right-28 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40" 
         onClick={() => setActiveView('gif_machine')}
       >
         <button 
-          className="w-12 h-32 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all group-hover:scale-110 active:scale-95 border border-amber-500/30 shadow-2xl relative overflow-hidden"
+          className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 border border-amber-500/30 shadow-2xl relative overflow-hidden"
           style={{ 
             backgroundColor: `${theme.panelOuter}f0`, 
             color: '#F59E0B',
@@ -573,9 +573,8 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
           }}
           title="Switch to Advanced GIF Machine"
         >
-          <Sparkles size={16} className="animate-pulse text-amber-400" />
-          <ChevronRight size={26} strokeWidth={3} className="group-hover:translate-x-1 transition-transform text-amber-400" />
-          <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">GIF</span>
+          <ChevronRight size={28} strokeWidth={3} className="group-hover:translate-x-1 transition-transform text-amber-400" />
+          <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">GIF</span>
         </button>
       </div>
 
@@ -676,6 +675,12 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
   const [endTime, setEndTime] = useState('00:00:10');
   const [customGifName, setCustomGifName] = useState('');
 
+  // Customizable Quality Settings (FFmpeg based)
+  const [showQualityModal, setShowQualityModal] = useState(false);
+  const [fps, setFps] = useState('original');
+  const [scale, setScale] = useState('original');
+  const [dither, setDither] = useState('bayer');
+
   // Pick local video from PC via Windows dialog
   const handlePickLocalVideo = async () => {
     try {
@@ -719,9 +724,9 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
             customName: customGifName,
             startTime: startTime,
             endTime: endTime,
-            fps: 'original',
-            scale: 'original',
-            dither: 'bayer'
+            fps: fps,
+            scale: scale,
+            dither: dither
           })
         });
         const data = await res.json();
@@ -739,9 +744,9 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
             customName: customGifName,
             startTime: startTime,
             endTime: endTime,
-            fps: 'original',
-            scale: 'original',
-            dither: 'bayer'
+            fps: fps,
+            scale: scale,
+            dither: dither
           })
         });
         const data = await res.json();
@@ -762,16 +767,18 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
     return fn.endsWith('.mp4') || fn.endsWith('.webm') || fn.endsWith('.mkv') || fn.endsWith('.mov');
   });
 
+  const qualitySummary = `${fps === 'original' ? 'Original FPS' : `${fps} FPS`} · ${scale === 'original' ? '100% Res' : scale}`;
+
   return (
-    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-1 relative" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
       
-      {/* Stylized Left Arrow to return to Downloader */}
+      {/* Stylized Left Arrow to return to Downloader (Identical Height & Position) */}
       <div 
         onClick={() => setActiveView('main')}
-        className="absolute -left-20 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 group cursor-pointer z-40"
+        className="absolute -left-28 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40"
       >
         <button 
-          className="w-12 h-32 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all group-hover:scale-110 active:scale-95 border border-white/10 shadow-2xl relative overflow-hidden"
+          className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 border border-white/10 shadow-2xl relative overflow-hidden"
           style={{ 
             backgroundColor: `${theme.panelOuter}f0`, 
             color: theme.accent,
@@ -779,19 +786,28 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
           }}
           title="Back to Downloader"
         >
-          <ChevronLeft size={26} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
-          <span className="text-[10px] font-black uppercase tracking-wider text-white opacity-90">Back</span>
+          <ChevronLeft size={28} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
+          <span className="text-[11px] font-black uppercase tracking-wider text-white opacity-90">Back</span>
         </button>
       </div>
 
       {/* Left Panel: Video Source Selector */}
       <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[26px] font-bold" style={{ color: theme.textMain }}>1. Choose Video Source</h2>
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              ORIGINAL QUALITY
-            </span>
+          {/* Header on ONE Single Line */}
+          <div className="flex items-center justify-between gap-3 mb-4 w-full">
+            <h2 className="text-[22px] font-bold whitespace-nowrap text-white">1. Choose Video Source</h2>
+            
+            {/* Clickable Custom Quality Pill Button */}
+            <button 
+              onClick={() => setShowQualityModal(true)}
+              className="px-3 py-1.5 rounded-full font-bold text-xs whitespace-nowrap bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm"
+              title="Click to customize FFmpeg video quality, framerate & dithering"
+            >
+              <Sliders size={13} className="text-amber-400" />
+              <span>{qualitySummary}</span>
+              <ChevronDown size={14} className="opacity-70" />
+            </button>
           </div>
 
           <div className="flex flex-col gap-3">
@@ -883,7 +899,7 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
       <div className="flex-[1.2] rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[26px] font-bold" style={{ color: theme.textMain }}>2. GIF Quality & Timestamps</h2>
+            <h2 className="text-[22px] font-bold whitespace-nowrap" style={{ color: theme.textMain }}>2. GIF Output & Trimmer</h2>
           </div>
 
           <div className="flex flex-col gap-4">
@@ -974,13 +990,102 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
           </button>
         </div>
       </div>
+
+      {/* FFmpeg Quality Customization Popover / Modal */}
+      <AnimatePresence>
+        {showQualityModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[250] flex items-center justify-center bg-black/60 backdrop-blur-md pointer-events-auto"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-[480px] p-6 rounded-[24px] shadow-2xl flex flex-col gap-5 border border-white/10"
+              style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
+            >
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2 text-base font-bold text-amber-400">
+                  <Sliders size={18} />
+                  <span>FFmpeg Master Quality Configuration</span>
+                </div>
+                <button onClick={() => setShowQualityModal(false)} className="opacity-60 hover:opacity-100 p-1">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-4 text-xs font-medium">
+                {/* Framerate Selection */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="opacity-80 font-bold">1. Target Framerate (FPS):</span>
+                  <select 
+                    value={fps} 
+                    onChange={e => setFps(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 font-bold text-white outline-none cursor-pointer"
+                  >
+                    <option value="original">Preserve Original FPS (100% Full Smoothness)</option>
+                    <option value="60">60 FPS (Ultra Smooth Gamer Fidelity)</option>
+                    <option value="50">50 FPS (PAL High Speed)</option>
+                    <option value="30">30 FPS (Standard Web Frame Rate)</option>
+                    <option value="24">24 FPS (Cinematic Look)</option>
+                    <option value="15">15 FPS (Compact File Size)</option>
+                  </select>
+                </div>
+
+                {/* Resolution / Scale Selection */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="opacity-80 font-bold">2. Video Resolution (Lanczos Scale):</span>
+                  <select 
+                    value={scale} 
+                    onChange={e => setScale(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 font-bold text-white outline-none cursor-pointer"
+                  >
+                    <option value="original">Original Source Resolution (1:1 Exact Pixel Match)</option>
+                    <option value="1080p">1080p Full HD (Downscale with Lanczos Filter)</option>
+                    <option value="720p">720p HD (Balanced Quality & Size)</option>
+                    <option value="480p">480p Standard (Medium GIF Size)</option>
+                    <option value="360p">360p Lightweight (Small Discord / Chat Size)</option>
+                  </select>
+                </div>
+
+                {/* Dithering & Palette Matrix */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="opacity-80 font-bold">3. Color Palette & Dithering Algorithm:</span>
+                  <select 
+                    value={dither} 
+                    onChange={e => setDither(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 font-bold text-white outline-none cursor-pointer"
+                  >
+                    <option value="bayer">Bayer Matrix Scale 5 (Master Crisp Dither - Recommended)</option>
+                    <option value="sierra">Sierra 2-4A (Smooth Gradients & Zero Banding)</option>
+                    <option value="floyd">Floyd-Steinberg (Classic Precision)</option>
+                    <option value="none">No Dither (Hard Edge / Cartoon Style)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <button 
+                  onClick={() => setShowQualityModal(false)}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-wider bg-amber-500 hover:bg-amber-400 text-black shadow-lg transition-all active:scale-[0.98]"
+                >
+                  Save Quality Settings
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function SettingsView({ theme, playlistMode, setPlaylistMode, quality, setQuality, historyItems }: any) {
   return (
-    <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-4" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-2" style={{ backgroundColor: theme.panelOuter }}>
       <div className="flex-1 rounded-[20px] p-6 flex flex-col" style={{ backgroundColor: theme.panelInner }}>
         <h2 className="text-[34px] mb-8 font-medium text-center w-full" style={{ color: theme.textMain }}>Settings</h2>
         <div className="w-full flex flex-col gap-6 pl-2 mt-4">
@@ -1030,7 +1135,7 @@ function LogView({ theme }: { theme: any }) {
   }, []);
   const filtered = logs.filter(l => l.toLowerCase().includes(search.toLowerCase()));
   return (
-    <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex flex-col mt-4" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex flex-col mt-2" style={{ backgroundColor: theme.panelOuter }}>
       <div className="flex-1 rounded-[20px] p-6 flex flex-col font-mono text-[18px] overflow-hidden" style={{ backgroundColor: theme.panelInner, color: theme.textSecondary }}>
         <h2 className="text-[28px] mb-4 font-medium font-sans text-center shrink-0" style={{ color: theme.textMain }}>Application Logs</h2>
         <div className="w-[85%] h-[2px] mb-6 self-center shrink-0" style={{ backgroundColor: theme.btnDarkBorder }}></div>
@@ -1072,7 +1177,7 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
   }, [done, setActiveView, checkUpdates, setUpdateAvailable]);
 
   return (
-    <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex flex-col mt-4" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex flex-col mt-2" style={{ backgroundColor: theme.panelOuter }}>
       <div className="flex-1 rounded-[20px] p-6 flex flex-col font-mono text-[18px] overflow-hidden" style={{ backgroundColor: theme.panelInner, color: theme.textSecondary }}>
         <h2 className="text-[28px] mb-4 font-medium font-sans text-center shrink-0" style={{ color: theme.textMain }}>Tool Update</h2>
         <div className="w-[85%] h-[2px] mb-6 self-center shrink-0" style={{ backgroundColor: theme.btnDarkBorder }}></div>
