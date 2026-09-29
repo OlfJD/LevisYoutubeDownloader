@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { 
   Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square, 
   ChevronRight, ChevronLeft, Film, Sparkles, FolderCheck, HardDrive, 
-  History, Scissors, Volume2, Check, Video, Play, FileVideo
+  History, Scissors, Volume2, Check, Video, Play, FileVideo, ArrowRight, ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeEditor from './ThemeEditor';
@@ -237,12 +237,12 @@ export default function App() {
       {/* Seamless Custom Header */}
       <CustomTitleBar theme={theme} />
 
-      <div className="flex-1 flex flex-col items-center justify-between pt-6 pb-24 relative">
+      <div className="flex-1 flex flex-col items-center justify-between pt-4 pb-20 relative">
         
-        {/* Dynamic Title */}
-        <div className="relative mb-0 mt-3">
+        {/* Dynamic Glowing Title */}
+        <div className="relative mb-0 mt-2 flex flex-col items-center">
           <h1 
-            className="text-[60px] font-medium tracking-tight mb-2 select-none relative backdrop-blur-[2px] border py-2 px-10 rounded-3xl mix-blend-screen text-center"
+            className="text-[58px] font-medium tracking-tight mb-1 select-none relative backdrop-blur-[2px] border py-1.5 px-10 rounded-3xl mix-blend-screen text-center"
             style={{ 
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
               borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -266,15 +266,15 @@ export default function App() {
         </div>
 
         {/* View Switcher Carousel / Container */}
-        <div className="flex-1 w-full max-w-5xl flex flex-col items-center px-4 relative mt-3">
+        <div className="flex-1 w-full max-w-5xl flex flex-col items-center px-4 relative mt-2">
           <AnimatePresence mode="wait">
             {activeView === 'main' && (
               <motion.div
                 key="main"
-                initial={{ opacity: 0, x: -30 }}
+                initial={{ opacity: 0, x: -25 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -30 }}
-                transition={{ duration: 0.2 }}
+                exit={{ opacity: 0, x: -25 }}
+                transition={{ duration: 0.18 }}
                 className="w-full flex justify-center relative"
               >
                 <MainView 
@@ -303,10 +303,10 @@ export default function App() {
             {activeView === 'gif_machine' && (
               <motion.div
                 key="gif_machine"
-                initial={{ opacity: 0, x: 30 }}
+                initial={{ opacity: 0, x: 25 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 30 }}
-                transition={{ duration: 0.2 }}
+                exit={{ opacity: 0, x: 25 }}
+                transition={{ duration: 0.18 }}
                 className="w-full flex justify-center relative"
               >
                 <AdvancedGifMachineView 
@@ -384,7 +384,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Bottom Navigation Footer */}
-        <div className="absolute bottom-8 w-full flex justify-between items-end pointer-events-none px-8 z-30">
+        <div className="absolute bottom-6 w-full flex justify-between items-end pointer-events-none px-8 z-30">
           <button 
             onClick={() => setActiveView(activeView === 'settings' ? 'main' : 'settings')} 
             className="pointer-events-auto rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group border border-white/5 shadow-lg"
@@ -557,22 +557,25 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
   const displayTitle = customName ? `${customName} (Custom)` : downloadTitle;
 
   return (
-    <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8">
+    <motion.div layout className="w-full max-w-[840px] flex flex-col items-center relative gap-7">
       
       {/* Stylized Floating Right Arrow to GIF Machine */}
-      <div className="absolute -right-28 top-1/2 -translate-y-1/2 hidden xl:flex flex-col items-center gap-2 group cursor-pointer z-40" onClick={() => setActiveView('gif_machine')}>
+      <div 
+        className="absolute -right-20 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 group cursor-pointer z-40" 
+        onClick={() => setActiveView('gif_machine')}
+      >
         <button 
-          className="w-14 h-28 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all group-hover:scale-105 active:scale-95 border border-white/10 shadow-2xl relative overflow-hidden"
+          className="w-12 h-32 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all group-hover:scale-110 active:scale-95 border border-amber-500/30 shadow-2xl relative overflow-hidden"
           style={{ 
-            backgroundColor: `${theme.panelOuter}eb`, 
+            backgroundColor: `${theme.panelOuter}f0`, 
             color: '#F59E0B',
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 24px rgba(0,0,0,0.4)` 
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.2), 0 8px 25px rgba(245,158,11,0.25)` 
           }}
           title="Switch to Advanced GIF Machine"
         >
           <Sparkles size={16} className="animate-pulse text-amber-400" />
-          <ChevronRight size={28} strokeWidth={2.5} className="group-hover:translate-x-1 transition-transform" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-white opacity-80">GIF</span>
+          <ChevronRight size={26} strokeWidth={3} className="group-hover:translate-x-1 transition-transform text-amber-400" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">GIF</span>
         </button>
       </div>
 
@@ -580,7 +583,7 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
       <div className="w-full relative flex gap-3 h-[46px] items-center">
         <div className="flex-1 flex h-full rounded-[10px] overflow-hidden p-[2px] shadow-inner relative z-10 transition-all" style={{ backgroundColor: theme.inputBg }}>
           <input 
-            type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Any Site)..." 
+            type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Twitter, Any Site)..." 
             className="flex-1 bg-transparent px-4 py-[3px] outline-none font-medium placeholder:opacity-60 text-[19px] disabled:opacity-50 tracking-wide" style={{ color: theme.inputText }}
           />
           <div className="w-[3px] h-[28px] overflow-hidden rounded-full self-center ml-3 mr-1" style={{ backgroundColor: theme.inputText }}></div>
@@ -639,7 +642,7 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
       </motion.div>
 
       {/* Bottom Action Buttons */}
-      <motion.div layout className="mt-28 flex flex-col items-center gap-[20px] w-[800px]">
+      <motion.div layout className="mt-20 flex flex-col items-center gap-[20px] w-[800px]">
         <button onClick={() => setActiveView('prename')} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><PenLine size={20} /><span className="relative z-10">Prename File</span></button>
         <div className="flex justify-center gap-[24px]">
           <button onClick={changeDownloadFolder} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><FolderOpen size={20} /><span className="relative z-10">Change Folder</span></button>
@@ -760,24 +763,24 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
   });
 
   return (
-    <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-2 relative" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-1 relative" style={{ backgroundColor: theme.panelOuter }}>
       
       {/* Stylized Left Arrow to return to Downloader */}
       <div 
         onClick={() => setActiveView('main')}
-        className="absolute -left-20 top-1/2 -translate-y-1/2 hidden xl:flex flex-col items-center gap-2 group cursor-pointer z-40"
+        className="absolute -left-20 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 group cursor-pointer z-40"
       >
         <button 
-          className="w-14 h-28 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all group-hover:scale-105 active:scale-95 border border-white/10 shadow-2xl relative overflow-hidden"
+          className="w-12 h-32 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all group-hover:scale-110 active:scale-95 border border-white/10 shadow-2xl relative overflow-hidden"
           style={{ 
-            backgroundColor: `${theme.panelOuter}eb`, 
+            backgroundColor: `${theme.panelOuter}f0`, 
             color: theme.accent,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 24px rgba(0,0,0,0.4)` 
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.2), 0 8px 25px rgba(0,0,0,0.4)` 
           }}
           title="Back to Downloader"
         >
-          <ChevronLeft size={28} strokeWidth={2.5} className="group-hover:-translate-x-1 transition-transform" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-white opacity-80">Back</span>
+          <ChevronLeft size={26} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-white opacity-90">Back</span>
         </button>
       </div>
 
@@ -823,7 +826,7 @@ function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHisto
               </div>
 
               {videoHistory.length > 0 ? (
-                <div className="max-h-28 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
+                <div className="max-h-24 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
                   {videoHistory.map((v: any, i: number) => (
                     <div 
                       key={i}
