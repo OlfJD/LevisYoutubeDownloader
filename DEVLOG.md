@@ -79,7 +79,9 @@ All future releases and updates for this project **MUST** adhere to the **Semant
   - **Meme Caption Banners**: Classic Impact meme text rendering (`drawtext` filter with white fill and thick black stroke) for top and bottom titles.
   - **Max File Size Targets**: Compression target presets for Discord Free (8 MB), Twitter / X (15 MB), Discord Nitro (25 MB), and Web / Telegram (50 MB).
   - **Master 2-Pass Palettegen Filter**: Optimal 256-color palette extraction with Bayer matrix scale 5, Sierra 2-4A, and Floyd-Steinberg dithering for 60fps true-color quality.
-  - **Branding & Layout**: Refined GIF Machine branding with radiant Yellow/Amber (`#F59E0B`) accents, perfectly aligned floating navigation buttons (`-right-16` / `-left-16`), and removed redundant top return pills.
+  - **Branding & Visual Hierarchy**: Refined GIF Machine branding with radiant Yellow/Amber (`#F59E0B`) accents, dedicated action buttons, and streamlined navigation without redundant return pills.
+  - **Geometry & Button Alignment**: Standardized `MainView` and `GifMachineView` within matching `w-[1050px]` frame envelopes. Floating navigation buttons (GIF button on Page 1 and Back button on Page 2) now share identical horizontal coordinate offsets (`-right-16` / `-left-16` @ 589px from window center), eliminating dead space discrepancies.
+  - **Dropdown Boundary & Popover Unclipping**: Configured custom Obsidian dropdowns with right-aligned popovers (`right-0`), eliminating rightward overflow truncation inside settings scroll panels while maintaining generous label-to-control spacing.
 - **Universal Downloader Power Settings**:
   - **SponsorBlock Integration**: Automatic detection and removal of sponsor segments, intros, outros, and self-promotions.
   - **Browser Cookie Extractor & Sync**: 1-click session cookie extraction from Google Chrome, Mozilla Firefox, Brave, Microsoft Edge, Opera, and Vivaldi.
