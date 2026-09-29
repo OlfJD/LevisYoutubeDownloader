@@ -4,7 +4,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square, AlertCircle, Sparkles, Film, Music, FileVideo, Volume2 } from 'lucide-react';
+import { 
+  Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square, 
+  ChevronRight, ChevronLeft, Film, Sparkles, FolderCheck, HardDrive, 
+  History, Scissors, Volume2, Check, Video, Play, FileVideo
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeEditor from './ThemeEditor';
 
@@ -24,7 +28,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
     >
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold tracking-wider uppercase opacity-40" style={{ color: theme.textSecondary }}>
-          Levi's YouTube Downloader
+          Levi's Media Downloader & GIF Machine
         </span>
       </div>
       <div className="flex items-center gap-1">
@@ -33,6 +37,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
           onClick={handleMinimize}
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 active:scale-95"
           style={{ color: theme.textMain }}
+          title="Minimize"
         >
           <span className="text-lg leading-none -mt-0.5">—</span>
         </button>
@@ -41,6 +46,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
           onClick={handleClose}
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-red-600/90 active:scale-95 hover:text-white"
           style={{ color: theme.textMain }}
+          title="Close"
         >
           <X size={16} />
         </button>
@@ -50,7 +56,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
 }
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'main' | 'settings' | 'log' | 'update' | 'prename'>('main');
+  const [activeView, setActiveView] = useState<'main' | 'gif_machine' | 'settings' | 'log' | 'update' | 'prename'>('main');
   
   const [url, setUrl] = useState('');
   const [customName, setCustomName] = useState('');
@@ -60,7 +66,6 @@ export default function App() {
   const [playlistMode, setPlaylistMode] = useState(false);
   const [showPlaylistPopup, setShowPlaylistPopup] = useState(false);
   const [quality, setQuality] = useState('Best');
-  const [gifSoundLoop, setGifSoundLoop] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     update_available: boolean;
@@ -84,7 +89,7 @@ export default function App() {
 
   useEffect(() => { fetchHistory(); }, []);
 
-  // Automatic Background Startup Update Check (both yt-dlp and LeviDownloader)
+  // Automatic Background Startup Update Check
   const checkUpdates = async (force: boolean = false) => {
     try {
       const res = await fetch(`/api/check_updates${force ? '?force=true' : ''}`);
@@ -137,7 +142,6 @@ export default function App() {
       .then(d => {
         if(d.quality) setQuality(d.quality);
         if(d.playlistMode !== undefined) setPlaylistMode(d.playlistMode);
-        if(d.gifSoundLoop !== undefined) setGifSoundLoop(d.gifSoundLoop);
       }).catch(e => console.log("Engine starting..."));
   }, []);
 
@@ -151,9 +155,8 @@ export default function App() {
 
   const handleQualityChange = (val: string) => { setQuality(val); saveSetting('quality', val); };
   const handlePlaylistModeChange = (val: boolean) => { setPlaylistMode(val); saveSetting('playlistMode', val); };
-  const handleGifSoundLoopChange = (val: boolean) => { setGifSoundLoop(val); saveSetting('gifSoundLoop', val); };
 
-  // Real Download Initialization (Supports MP3, MP4, WAV, and Master-Quality GIF)
+  // Real Download Initialization
   const startRealDownload = async (format: string) => {
     if (!url || isDownloading) return;
     
@@ -165,21 +168,16 @@ export default function App() {
     setIsDownloading(true);
     setDownloadError(false); 
 
-    const finalFmt = format === 'gif' && gifSoundLoop ? 'loop_mp4' : format;
-
     try {
       const response = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           url: url, 
-          format: finalFmt, 
+          format: format, 
           quality: quality, 
           customName: customName,
-          playlistMode: playlistMode,
-          fps: 'original',
-          scale: 'original',
-          dither: 'bayer'
+          playlistMode: playlistMode 
         })
       });
       const data = await response.json();
@@ -240,52 +238,44 @@ export default function App() {
       <CustomTitleBar theme={theme} />
 
       <div className="flex-1 flex flex-col items-center justify-between pt-6 pb-24 relative">
-        <div className="relative mb-0 mt-4">
+        
+        {/* Dynamic Title */}
+        <div className="relative mb-0 mt-3">
           <h1 
-            className="text-[64px] font-medium tracking-tight mb-2 select-none relative backdrop-blur-[2px] border py-2 px-10 rounded-3xl mix-blend-screen text-center"
+            className="text-[60px] font-medium tracking-tight mb-2 select-none relative backdrop-blur-[2px] border py-2 px-10 rounded-3xl mix-blend-screen text-center"
             style={{ 
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
               borderColor: 'rgba(255, 255, 255, 0.1)',
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 20px rgba(0,0,0,0.2)'
             }}
           >
-            <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>You</span><span style={{ color: theme.accent, textShadow: `0 2px 10px ${theme.accent}88` }}>Tube</span>
-            <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}> Downloader</span>
+            {activeView === 'gif_machine' ? (
+              <>
+                <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>Advanced </span>
+                <span style={{ color: '#F59E0B', textShadow: '0 2px 10px rgba(245,158,11,0.6)' }}>GIF</span>
+                <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}> Machine</span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>Media </span>
+                <span style={{ color: theme.accent, textShadow: `0 2px 10px ${theme.accent}88` }}>& Video</span>
+                <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}> Downloader</span>
+              </>
+            )}
           </h1>
         </div>
 
-        <div className="flex-1 w-full max-w-5xl flex flex-col items-center px-4 relative mt-4">
+        {/* View Switcher Carousel / Container */}
+        <div className="flex-1 w-full max-w-5xl flex flex-col items-center px-4 relative mt-3">
           <AnimatePresence mode="wait">
-            {activeView === 'settings' && (
-              <motion.div
-                key="settings"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="w-full flex justify-center"
-              >
-                <SettingsView 
-                  theme={theme} 
-                  playlistMode={playlistMode} 
-                  setPlaylistMode={handlePlaylistModeChange} 
-                  quality={quality}
-                  setQuality={handleQualityChange}
-                  gifSoundLoop={gifSoundLoop}
-                  setGifSoundLoop={handleGifSoundLoopChange}
-                  historyItems={historyItems}
-                  startRealDownload={startRealDownload}
-                />
-              </motion.div>
-            )}
-            {['main', 'prename'].includes(activeView) && (
+            {activeView === 'main' && (
               <motion.div
                 key="main"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="w-full flex justify-center"
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.2 }}
+                className="w-full flex justify-center relative"
               >
                 <MainView 
                   url={url} 
@@ -309,6 +299,50 @@ export default function App() {
                 />
               </motion.div>
             )}
+
+            {activeView === 'gif_machine' && (
+              <motion.div
+                key="gif_machine"
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 30 }}
+                transition={{ duration: 0.2 }}
+                className="w-full flex justify-center relative"
+              >
+                <AdvancedGifMachineView 
+                  theme={theme}
+                  setActiveView={setActiveView}
+                  historyItems={historyItems}
+                  fetchHistory={fetchHistory}
+                  url={url}
+                  setUrl={setUrl}
+                  isDownloading={isDownloading}
+                  setIsDownloading={setIsDownloading}
+                  setDownloadError={setDownloadError}
+                />
+              </motion.div>
+            )}
+
+            {activeView === 'settings' && (
+              <motion.div
+                key="settings"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="w-full flex justify-center"
+              >
+                <SettingsView 
+                  theme={theme} 
+                  playlistMode={playlistMode} 
+                  setPlaylistMode={handlePlaylistModeChange} 
+                  quality={quality}
+                  setQuality={handleQualityChange}
+                  historyItems={historyItems}
+                />
+              </motion.div>
+            )}
+
             {activeView === 'log' && (
               <motion.div
                 key="log"
@@ -321,6 +355,7 @@ export default function App() {
                 <LogView theme={theme} />
               </motion.div>
             )}
+
             {activeView === 'update' && (
               <motion.div
                 key="update"
@@ -341,20 +376,15 @@ export default function App() {
           </AnimatePresence>
         </div>
 
+        {/* Prename Modal */}
         <AnimatePresence>
            {activeView === 'prename' && (
-             <PrenameView 
-               theme={theme} 
-               setActiveView={setActiveView} 
-               customName={customName} 
-               setCustomName={setCustomName} 
-               setUrl={setUrl}
-             />
+             <PrenameView theme={theme} setActiveView={setActiveView} customName={customName} setCustomName={setCustomName} />
            )}
         </AnimatePresence>
 
-        {/* Footer */}
-        <div className="absolute bottom-8 w-full flex justify-between items-end pointer-events-none px-8">
+        {/* Bottom Navigation Footer */}
+        <div className="absolute bottom-8 w-full flex justify-between items-end pointer-events-none px-8 z-30">
           <button 
             onClick={() => setActiveView(activeView === 'settings' ? 'main' : 'settings')} 
             className="pointer-events-auto rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group border border-white/5 shadow-lg"
@@ -368,7 +398,7 @@ export default function App() {
             onClick={() => setActiveView(activeView === 'log' ? 'main' : 'log')}
             className="pointer-events-auto rounded-2xl flex items-center justify-center font-bold transition-all text-[18px] active:translate-y-[4px] relative overflow-hidden group border border-white/5 shadow-lg"
             style={{ width: '60px', height: '60px', backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}
-            title="View Logs"
+            title="Logs"
           >
             <span className="uppercase tracking-widest pl-[0.1em]">Log</span>
           </button>
@@ -395,7 +425,7 @@ export default function App() {
                 <button onClick={() => setShowUpdatePopup(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
               </div>
               <p className="text-sm font-medium relative z-10 leading-relaxed" style={{ color: theme.textSecondary }}>
-                {updateInfo?.message || "A new update is available for yt-dlp engine or Levi's YouTube Downloader. Click below to install."}
+                {updateInfo?.message || "A new update is available for yt-dlp engine or Levi's Downloader. Click below to install."}
               </p>
               <button
                  onClick={() => { setShowUpdatePopup(false); handleUpdate(); }}
@@ -426,7 +456,7 @@ export default function App() {
                 </div>
                 <button onClick={() => setDownloadError(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
               </div>
-              <p className="text-sm font-medium relative z-10 w-[240px] leading-relaxed" style={{ color: theme.textSecondary }}>The download encountered an error. Please try updating the tool and downloading again.</p>
+              <p className="text-sm font-medium relative z-10 w-[240px] leading-relaxed" style={{ color: theme.textSecondary }}>The process encountered an error. Please try updating the tool and trying again.</p>
               <button
                  onClick={() => { setDownloadError(false); handleUpdate(); }}
                  className="mt-2 font-bold py-2.5 px-4 rounded-2xl transition-all active:translate-y-[2px]"
@@ -438,6 +468,7 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* Playlist Detected Modal */}
         <AnimatePresence>
           {showPlaylistPopup && (
             <motion.div 
@@ -465,6 +496,9 @@ export default function App() {
   );
 }
 
+// -------------------------------------------------------------
+// ORIGINAL PAGE 1 VIEW: Faithful 100% OG Layout + Stylized Right Arrow
+// -------------------------------------------------------------
 function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, setDownloadError, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, showUpdatePopup, setShowUpdatePopup }: any) {
   const [progress, setProgress] = useState(0);
   const [downloadTitle, setDownloadTitle] = useState('Preparing...');
@@ -474,7 +508,6 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
     setIsDownloading(false);
   };
 
-  // Strict Poller for real progress, queue generation, and end-of-process
   useEffect(() => {
     if (!isDownloading) {
       setProgress(0);
@@ -486,26 +519,23 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
       fetch('/api/logs').then(r => r.json()).then(logs => {
         if (!Array.isArray(logs)) return;
 
-        // Check if backend finished process
         const isDone = logs.some(l => l.includes('Process Finished Successfully!'));
         const isError = logs.some(l => l.includes('CRITICAL ERROR:'));
 
         if (isDone || isError) {
             setIsDownloading(false);
             if (isError) setDownloadError(true);
-            else setCustomName(''); // Wipe custom name on success
+            else setCustomName('');
             fetchHistory();
             return;
         }
 
-        // Parse Progress
         const dlLogs = logs.filter(l => typeof l === 'string' && l.includes('[download]') && l.includes('%'));
         if (dlLogs.length > 0) {
           const match = dlLogs[dlLogs.length - 1].match(/(\d+(?:\.\d+)?)%/);
           if (match) setProgress(parseFloat(match[1]));
         }
 
-        // Parse Title (Video 1 of 5, or direct filename)
         const pMatch = logs.find(l => typeof l === 'string' && l.includes('Downloading video '));
         if (pMatch) {
             const m = pMatch.match(/Downloading video (\d+) of (\d+)/);
@@ -514,7 +544,7 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
             const nameLog = logs.find(l => typeof l === 'string' && l.includes('[download] Destination:'));
             if (nameLog) {
                 let file = nameLog.split('Destination: ')[1].split('\\').pop().split('/').pop();
-                file = file.replace(/\.f\d+\.(m4a|webm|mp4)$/, ''); // Strip intermediate extensions visually
+                file = file.replace(/\.f\d+\.(m4a|webm|mp4)$/, '');
                 setDownloadTitle(file);
             }
         }
@@ -529,11 +559,28 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
   return (
     <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8">
       
+      {/* Stylized Floating Right Arrow to GIF Machine */}
+      <div className="absolute -right-28 top-1/2 -translate-y-1/2 hidden xl:flex flex-col items-center gap-2 group cursor-pointer z-40" onClick={() => setActiveView('gif_machine')}>
+        <button 
+          className="w-14 h-28 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all group-hover:scale-105 active:scale-95 border border-white/10 shadow-2xl relative overflow-hidden"
+          style={{ 
+            backgroundColor: `${theme.panelOuter}eb`, 
+            color: '#F59E0B',
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 24px rgba(0,0,0,0.4)` 
+          }}
+          title="Switch to Advanced GIF Machine"
+        >
+          <Sparkles size={16} className="animate-pulse text-amber-400" />
+          <ChevronRight size={28} strokeWidth={2.5} className="group-hover:translate-x-1 transition-transform" />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-white opacity-80">GIF</span>
+        </button>
+      </div>
+
       {/* Input Area with Inline Stop Button */}
       <div className="w-full relative flex gap-3 h-[46px] items-center">
         <div className="flex-1 flex h-full rounded-[10px] overflow-hidden p-[2px] shadow-inner relative z-10 transition-all" style={{ backgroundColor: theme.inputBg }}>
           <input 
-            type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Twitter, Any Site)..." 
+            type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Any Site)..." 
             className="flex-1 bg-transparent px-4 py-[3px] outline-none font-medium placeholder:opacity-60 text-[19px] disabled:opacity-50 tracking-wide" style={{ color: theme.inputText }}
           />
           <div className="w-[3px] h-[28px] overflow-hidden rounded-full self-center ml-3 mr-1" style={{ backgroundColor: theme.inputText }}></div>
@@ -557,7 +604,7 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
         </AnimatePresence>
       </div>
       
-      {/* Waveform & Video Name (Smooth transition collapse) */}
+      {/* Waveform & Video Name */}
       <AnimatePresence initial={false}>
         {isDownloading && (
           <motion.div 
@@ -582,20 +629,17 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
         )}
       </AnimatePresence>
 
-      {/* Tactile 3D Download Buttons (MP3, MP4, WAV, and Master GIF) */}
+      {/* ORIGINAL 3 DOWNLOAD BUTTONS (MP3, MP4, WAV) */}
       <motion.div layout className="flex flex-col items-center gap-6">
         <div className="flex gap-8">
           <button onClick={() => startRealDownload('mp3')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP3</span></button>
           <button onClick={() => startRealDownload('mp4')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP4</span></button>
         </div>
-        <div className="flex gap-8">
-          <button onClick={() => startRealDownload('wav')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download WAV</span></button>
-          <button onClick={() => startRealDownload('gif')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download GIF</span></button>
-        </div>
+        <button onClick={() => startRealDownload('wav')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download WAV</span></button>
       </motion.div>
 
       {/* Bottom Action Buttons */}
-      <motion.div layout className="mt-20 flex flex-col items-center gap-[20px] w-[800px]">
+      <motion.div layout className="mt-28 flex flex-col items-center gap-[20px] w-[800px]">
         <button onClick={() => setActiveView('prename')} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><PenLine size={20} /><span className="relative z-10">Prename File</span></button>
         <div className="flex justify-center gap-[24px]">
           <button onClick={changeDownloadFolder} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><FolderOpen size={20} /><span className="relative z-10">Change Folder</span></button>
@@ -615,74 +659,349 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
   );
 }
 
-function SettingsView({ theme, playlistMode, setPlaylistMode, quality, setQuality, gifSoundLoop, setGifSoundLoop, historyItems, startRealDownload }: any) {
-  const handlePickLocalFile = async () => {
+// -------------------------------------------------------------
+// ADVANCED GIF MACHINE: Import video, pick from downloads, 2-pass master quality
+// -------------------------------------------------------------
+function AdvancedGifMachineView({ theme, setActiveView, historyItems, fetchHistory, url, setUrl, isDownloading, setIsDownloading, setDownloadError }: any) {
+  const [selectedSourceType, setSelectedSourceType] = useState<'local' | 'history' | 'url'>('local');
+  const [localFilePath, setLocalFilePath] = useState('');
+  const [localFileInfo, setLocalFileInfo] = useState<any>(null);
+  const [selectedHistoryFile, setSelectedHistoryFile] = useState('');
+  
+  const [gifFormat, setGifFormat] = useState<'gif' | 'loop_mp4' | 'webp'>('gif');
+  const [startTime, setStartTime] = useState('00:00:00');
+  const [endTime, setEndTime] = useState('00:00:10');
+  const [customGifName, setCustomGifName] = useState('');
+
+  // Pick local video from PC via Windows dialog
+  const handlePickLocalVideo = async () => {
     try {
       const res = await fetch('/api/select_local_file', { method: 'POST' });
       const data = await res.json();
       if (data.success && data.filePath) {
-        fetch('/api/convert_local', {
+        setLocalFilePath(data.filePath);
+        setSelectedSourceType('local');
+        if (data.info) {
+          setLocalFileInfo(data.info);
+          if (data.info.duration) {
+            const endSec = Math.min(10, Math.floor(data.info.duration));
+            setEndTime(`00:00:${endSec < 10 ? '0' : ''}${endSec}`);
+          }
+        }
+      }
+    } catch(e) {}
+  };
+
+  // Start conversion
+  const handleStartGifRender = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    setDownloadError(false);
+
+    let targetFile = '';
+    if (selectedSourceType === 'local') {
+      targetFile = localFilePath;
+    } else if (selectedSourceType === 'history') {
+      targetFile = selectedHistoryFile;
+    }
+
+    try {
+      if (selectedSourceType === 'url') {
+        const res = await fetch('/api/download', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            filePath: data.filePath,
-            format: 'gif',
+            url: url,
+            format: gifFormat,
+            customName: customGifName,
+            startTime: startTime,
+            endTime: endTime,
             fps: 'original',
             scale: 'original',
             dither: 'bayer'
           })
         });
+        const data = await res.json();
+        if (!data.success) {
+          setDownloadError(true);
+          setIsDownloading(false);
+        }
+      } else {
+        const res = await fetch('/api/convert_local', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filePath: targetFile,
+            format: gifFormat,
+            customName: customGifName,
+            startTime: startTime,
+            endTime: endTime,
+            fps: 'original',
+            scale: 'original',
+            dither: 'bayer'
+          })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          setDownloadError(true);
+          setIsDownloading(false);
+        }
       }
-    } catch(e) {}
+    } catch (e) {
+      setDownloadError(true);
+      setIsDownloading(false);
+    }
   };
 
+  // Filter video history items
+  const videoHistory = (historyItems || []).filter((h: any) => {
+    const fn = (h.filename || '').toLowerCase();
+    return fn.endsWith('.mp4') || fn.endsWith('.webm') || fn.endsWith('.mkv') || fn.endsWith('.mov');
+  });
+
   return (
-    <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-4" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-2 relative" style={{ backgroundColor: theme.panelOuter }}>
+      
+      {/* Stylized Left Arrow to return to Downloader */}
+      <div 
+        onClick={() => setActiveView('main')}
+        className="absolute -left-20 top-1/2 -translate-y-1/2 hidden xl:flex flex-col items-center gap-2 group cursor-pointer z-40"
+      >
+        <button 
+          className="w-14 h-28 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all group-hover:scale-105 active:scale-95 border border-white/10 shadow-2xl relative overflow-hidden"
+          style={{ 
+            backgroundColor: `${theme.panelOuter}eb`, 
+            color: theme.accent,
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 24px rgba(0,0,0,0.4)` 
+          }}
+          title="Back to Downloader"
+        >
+          <ChevronLeft size={28} strokeWidth={2.5} className="group-hover:-translate-x-1 transition-transform" />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-white opacity-80">Back</span>
+        </button>
+      </div>
+
+      {/* Left Panel: Video Source Selector */}
       <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
         <div>
-          <h2 className="text-[34px] mb-8 font-medium text-center w-full" style={{ color: theme.textMain }}>Settings</h2>
-          <div className="w-full flex flex-col gap-6 pl-2 mt-4">
-            <div className="flex flex-col gap-5">
-              <div className="flex items-center justify-start gap-4 mx-4">
-                <span className="text-[22px] whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
-                <div className="flex items-center pl-3 pr-2 py-1 rounded-lg text-[18px] min-w-[120px]" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText }}>
-                  <div className="font-bold tracking-wide w-full text-center pr-3">{quality}</div>
-                  <div className="w-[5px] h-[22px] rounded-full shrink-0" style={{ backgroundColor: theme.btnLightBorder }}></div>
-                  <div className="relative flex items-center justify-center cursor-pointer pl-3 pr-2 w-[40px]"><ChevronDown size={28} strokeWidth={4} className="pointer-events-none" /><select value={quality} onChange={(e) => setQuality(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full font-bold text-[18px]"><option className="font-bold text-black bg-white">Best</option><option className="font-bold text-black bg-white">1080p</option><option className="font-bold text-black bg-white">720p</option><option className="font-bold text-black bg-white">480p</option></select></div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[26px] font-bold" style={{ color: theme.textMain }}>1. Choose Video Source</h2>
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              ORIGINAL QUALITY
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {/* Option A: Import Local File */}
+            <button
+              onClick={handlePickLocalVideo}
+              className={`p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                selectedSourceType === 'local' && localFilePath ? 'bg-amber-500/20 border-amber-500/50' : 'bg-white/5 border-white/5 hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3 truncate">
+                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+                  <HardDrive size={18} />
+                </div>
+                <div className="truncate">
+                  <div className="text-sm font-bold text-white">Import Your Own Video File</div>
+                  <div className="text-xs text-gray-400 truncate max-w-[280px]">
+                    {localFilePath ? localFilePath.split('\\').pop() : 'Click to select MP4, MOV, MKV, AVI from PC'}
+                  </div>
+                </div>
+              </div>
+              <FolderOpen size={18} className="text-amber-400 shrink-0 ml-2" />
+            </button>
+
+            {/* Option B: Pick From Downloaded Ones */}
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-bold text-white">
+                  <History size={16} className="text-blue-400" />
+                  <span>Pick From Downloaded Videos:</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between w-[320px] mx-4">
-                <span className="text-[22px]" style={{ color: theme.textMain }}>Playlist Mode</span>
-                <button onClick={() => setPlaylistMode(!playlistMode)} className={`relative flex items-center w-14 h-5 rounded-full transition-colors ml-4`} style={{ backgroundColor: playlistMode ? theme.accent : '#555' }} aria-pressed={playlistMode}><div className={`absolute w-8 h-8 rounded-full transition-all shadow-md`} style={{ backgroundColor: playlistMode ? theme.inputBg : '#a0a0a8', left: playlistMode ? 'auto' : '-4px', right: playlistMode ? '-4px' : 'auto' }} /></button>
-              </div>
-
-              <div className="flex items-center justify-between w-[320px] mx-4">
-                <div className="flex flex-col">
-                  <span className="text-[20px]" style={{ color: theme.textMain }}>GIF Audio Loop</span>
-                  <span className="text-[12px] opacity-60">"GIF with Sound" MP4 loop</span>
+              {videoHistory.length > 0 ? (
+                <div className="max-h-28 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
+                  {videoHistory.map((v: any, i: number) => (
+                    <div 
+                      key={i}
+                      onClick={() => {
+                        setSelectedHistoryFile(v.filename);
+                        setSelectedSourceType('history');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono cursor-pointer truncate transition-all flex items-center justify-between ${
+                        selectedSourceType === 'history' && selectedHistoryFile === v.filename
+                          ? 'bg-amber-500/30 text-amber-200 border border-amber-500/40'
+                          : 'bg-black/30 hover:bg-black/60 text-gray-300'
+                      }`}
+                      title={v.filename}
+                    >
+                      <span className="truncate">{v.filename}</span>
+                      {selectedSourceType === 'history' && selectedHistoryFile === v.filename && (
+                        <Check size={14} className="text-amber-400 shrink-0 ml-1" />
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <button onClick={() => setGifSoundLoop(!gifSoundLoop)} className={`relative flex items-center w-14 h-5 rounded-full transition-colors ml-4`} style={{ backgroundColor: gifSoundLoop ? theme.accent : '#555' }} aria-pressed={gifSoundLoop}><div className={`absolute w-8 h-8 rounded-full transition-all shadow-md`} style={{ backgroundColor: gifSoundLoop ? theme.inputBg : '#a0a0a8', left: gifSoundLoop ? 'auto' : '-4px', right: gifSoundLoop ? '-4px' : 'auto' }} /></button>
+              ) : (
+                <div className="text-xs text-gray-500 italic py-2 text-center">No downloaded videos in history yet.</div>
+              )}
+            </div>
+
+            {/* Option C: Direct Web Link */}
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-sm font-bold text-white">
+                <Film size={16} className="text-purple-400" />
+                <span>Or From Current URL:</span>
               </div>
+              <input 
+                type="text"
+                placeholder="Paste video URL directly..."
+                value={url}
+                onChange={e => {
+                  setUrl(e.target.value);
+                  setSelectedSourceType('url');
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-xs text-white outline-none"
+              />
             </div>
           </div>
         </div>
 
-        <div className="px-4 pb-2">
-          <button 
-            onClick={handlePickLocalFile}
-            className="w-full py-3 rounded-xl font-bold text-[16px] uppercase tracking-wider flex items-center justify-center gap-2 border border-white/10 hover:bg-white/5 transition-all"
-            style={{ color: theme.textMain }}
-          >
-            <FolderOpen size={18} /> Convert Local Video to GIF
-          </button>
+        {/* Selected Source Status */}
+        <div className="text-xs font-mono opacity-60 truncate">
+          Active Source: <strong className="text-amber-400 font-bold">{selectedSourceType.toUpperCase()}</strong>
         </div>
       </div>
 
+      {/* Right Panel: Advanced 2-Pass Palettegen & Render Controls */}
+      <div className="flex-[1.2] rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[26px] font-bold" style={{ color: theme.textMain }}>2. GIF Quality & Timestamps</h2>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            {/* Format Selection */}
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setGifFormat('gif')}
+                className={`flex-1 py-2.5 px-3 rounded-xl border text-center transition-all ${
+                  gifFormat === 'gif' ? 'bg-amber-500/20 border-amber-500 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
+                }`}
+              >
+                <div className="text-xs text-amber-300 font-bold">Master GIF (.gif)</div>
+                <div className="text-[10px] opacity-70">2-Pass Palettegen (60fps)</div>
+              </button>
+
+              <button 
+                onClick={() => setGifFormat('loop_mp4')}
+                className={`flex-1 py-2.5 px-3 rounded-xl border text-center transition-all ${
+                  gifFormat === 'loop_mp4' ? 'bg-amber-500/20 border-amber-500 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
+                }`}
+              >
+                <div className="text-xs text-amber-300 font-bold flex items-center justify-center gap-1">
+                  <Volume2 size={13} /> Sound Loop (MP4)
+                </div>
+                <div className="text-[10px] opacity-70">"GIF with Sound"</div>
+              </button>
+            </div>
+
+            {/* Trimming Start & End */}
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                <Scissors size={14} />
+                <span>Timestamp Trimmer (Start / End):</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10">
+                  <span className="text-xs opacity-60">Start:</span>
+                  <input 
+                    type="text" 
+                    value={startTime} 
+                    onChange={e => setStartTime(e.target.value)} 
+                    className="w-full bg-transparent font-mono text-xs text-white text-center outline-none"
+                    placeholder="00:00:00"
+                  />
+                </div>
+                <span className="text-gray-500">→</span>
+                <div className="flex-1 flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10">
+                  <span className="text-xs opacity-60">End:</span>
+                  <input 
+                    type="text" 
+                    value={endTime} 
+                    onChange={e => setEndTime(e.target.value)} 
+                    className="w-full bg-transparent font-mono text-xs text-white text-center outline-none"
+                    placeholder="00:00:10"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Output Name */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs opacity-70">Custom GIF Name (optional):</span>
+              <input 
+                type="text" 
+                placeholder="Auto-generated if left empty..."
+                value={customGifName}
+                onChange={e => setCustomGifName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Big 3D Tactile Render Button */}
+        <div className="pt-4">
+          <button 
+            onClick={handleStartGifRender}
+            disabled={isDownloading || (selectedSourceType === 'local' && !localFilePath) || (selectedSourceType === 'history' && !selectedHistoryFile) || (selectedSourceType === 'url' && !url)}
+            className="w-full py-4 rounded-2xl font-extrabold uppercase tracking-widest text-[20px] transition-all active:translate-y-[4px] shadow-2xl flex items-center justify-center gap-2 disabled:opacity-40"
+            style={{ 
+              backgroundColor: theme.btnLightBg, 
+              color: theme.btnLightText, 
+              boxShadow: `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.3)` 
+            }}
+          >
+            <Sparkles size={22} className="text-amber-500" />
+            <span>{isDownloading ? 'Rendering Master GIF...' : 'Render Master GIF'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView({ theme, playlistMode, setPlaylistMode, quality, setQuality, historyItems }: any) {
+  return (
+    <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex gap-6 mt-4" style={{ backgroundColor: theme.panelOuter }}>
+      <div className="flex-1 rounded-[20px] p-6 flex flex-col" style={{ backgroundColor: theme.panelInner }}>
+        <h2 className="text-[34px] mb-8 font-medium text-center w-full" style={{ color: theme.textMain }}>Settings</h2>
+        <div className="w-full flex flex-col gap-6 pl-2 mt-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-start gap-4 mx-4">
+              <span className="text-[24px] whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
+              <div className="flex items-center pl-3 pr-2 py-1 rounded-lg text-[20px] min-w-[120px]" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText }}>
+                <div className="font-bold tracking-wide w-full text-center pr-3">{quality}</div>
+                <div className="w-[5px] h-[22px] rounded-full shrink-0" style={{ backgroundColor: theme.btnLightBorder }}></div>
+                <div className="relative flex items-center justify-center cursor-pointer pl-3 pr-2 w-[40px]"><ChevronDown size={28} strokeWidth={4} className="pointer-events-none" /><select value={quality} onChange={(e) => setQuality(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full font-bold text-[18px]"><option className="font-bold text-black bg-white">Best</option><option className="font-bold text-black bg-white">High</option><option className="font-bold text-black bg-white">Medium</option><option className="font-bold text-black bg-white">Low</option></select></div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-6 mx-4 mt-6">
+              <div className="flex items-center justify-between w-[320px]">
+                <span className="text-[24px]" style={{ color: theme.textMain }}>Playlist Mode</span>
+                <button onClick={() => setPlaylistMode(!playlistMode)} className={`relative flex items-center w-14 h-5 rounded-full transition-colors ml-4`} style={{ backgroundColor: playlistMode ? theme.accent : '#555' }} aria-pressed={playlistMode}><div className={`absolute w-8 h-8 rounded-full transition-all shadow-md`} style={{ backgroundColor: playlistMode ? theme.inputBg : '#a0a0a8', left: playlistMode ? 'auto' : '-4px', right: playlistMode ? '-4px' : 'auto' }} /></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="flex-[1.4] rounded-[20px] p-6 flex flex-col" style={{ backgroundColor: theme.panelInner }}>
         <h2 className="text-[30px] mb-6 font-medium text-center w-full" style={{ color: theme.textMain }}>Download History</h2>
         
-        {/* REDESIGNED GRID LAYOUT FOR HISTORY WRAPPING */}
         <div className="w-full flex-1 flex flex-col overflow-y-auto px-2 gap-4 custom-scrollbar">
           {historyItems.length > 0 ? historyItems.map((h: any, i: number) => (
             <div key={i} className="flex gap-4 items-start border-b border-white/5 pb-3">
@@ -764,30 +1083,14 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
   );
 }
 
-function PrenameView({ theme, setActiveView, customName, setCustomName, setUrl }: any) {
-  const handleSelectLocal = async () => {
-    try {
-      const res = await fetch('/api/select_local_file', { method: 'POST' });
-      const data = await res.json();
-      if (data.success && data.filePath) {
-        setUrl(data.filePath);
-        setCustomName(data.fileName.split('.')[0] + '_gif');
-        setActiveView('main');
-      }
-    } catch(e) {}
-  };
-
+function PrenameView({ theme, setActiveView, customName, setCustomName }: any) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 300 }} className="w-[500px] rounded-[24px] shadow-2xl p-6 flex flex-col items-center justify-center relative border border-white/10" style={{ backgroundColor: theme.panelOuter }}>
         <button onClick={() => setActiveView('main')} className="absolute top-4 right-4 transition-transform active:scale-95 z-10 opacity-70 hover:opacity-100" style={{ color: theme.textMain }}><X size={28} strokeWidth={2.5} /></button>
         <h2 className="text-[26px] mt-2 mb-6 font-bold" style={{ color: theme.textMain }}>Prename Next Download</h2>
-        <input type="text" placeholder="Enter custom filename..." value={customName} onChange={e => setCustomName(e.target.value)} className="w-full px-5 py-4 rounded-xl outline-none font-medium text-[20px] tracking-wide mb-6 shadow-inner" style={{ backgroundColor: theme.inputBg, color: theme.inputText }} />
-        
-        <div className="w-full flex gap-3">
-          <button onClick={() => setActiveView('main')} className="flex-1 font-bold text-[18px] py-[10px] rounded-2xl transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.accent, color: theme.inputBg, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 5px 0 rgba(0,0,0,0.3)` }}><span className="relative z-10">Save & Close</span></button>
-          <button onClick={handleSelectLocal} className="px-4 py-[10px] rounded-2xl font-bold text-[14px] border border-white/10 hover:bg-white/5 transition-all text-white flex items-center gap-1.5" title="Pick local video file from computer"><FolderOpen size={16} /> Pick Local File</button>
-        </div>
+        <input type="text" placeholder="Enter custom filename..." value={customName} onChange={e => setCustomName(e.target.value)} className="w-full px-5 py-4 rounded-xl outline-none font-medium text-[20px] tracking-wide mb-8 shadow-inner" style={{ backgroundColor: theme.inputBg, color: theme.inputText }} />
+        <button onClick={() => setActiveView('main')} className="font-bold text-[20px] py-[10px] px-10 rounded-2xl transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.accent, color: theme.inputBg, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 5px 0 rgba(0,0,0,0.3)` }}><span className="relative z-10">Save & Close</span></button>
       </motion.div>
     </motion.div>
   );
