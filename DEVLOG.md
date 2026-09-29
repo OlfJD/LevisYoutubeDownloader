@@ -68,6 +68,22 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
+### **v1.1.0-dev** (2026-09-29)
+- **Universal Any-Site Downloader**:
+  - Full support for YouTube, TikTok, Twitter/X, Instagram, Twitch, Reddit, Facebook, Vimeo, SoundCloud, and generic direct video streams (1,000+ sites).
+  - Dynamic real-time platform detection with interactive badges and presets.
+  - Added FLAC lossless audiophile audio format and WebM video formats.
+- **Master Video-to-GIF Studio**:
+  - High-fidelity 2-pass palette generation (`palettegen + paletteuse`) eliminating color banding and dithering artifacts.
+  - Retains 100% original video framerate (e.g. 60fps/30fps) and 1:1 original resolution or Lanczos rescale presets.
+  - **Looping Video with Sound**: Seamless video loop with synchronized 320kbps audio ("GIF with Sound").
+  - **Animated 24-bit WebP**: 16.7M full RGB colors and lossless compression support.
+  - **Local Video Converter**: Convert any video file from PC via native Windows file dialog or drag-and-drop.
+  - **Timestamp Segment Trimmer**: Extract custom start and end time ranges before rendering.
+- **UI & Architecture Overhaul**:
+  - Tab navigation between Universal Downloader, GIF Studio, Download History, Settings, and Live Console.
+  - Integrated 1-click Windows Explorer destination opener and responsive progress animations.
+
 ### **v1.0.4** (2026-09-21)
 - **Fix**: Resolved false persistent "Update Available" notification on the Update Tool button by updating bundled `yt-dlp` core binary to the latest release (`2026.08.19`).
 - **Fix**: Upgraded version comparison algorithm with zero-padded numeric segment comparisons to prevent false update alerts across version representations.
