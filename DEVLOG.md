@@ -68,21 +68,25 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
-### **v1.1.0-dev** (2026-09-29)
-- **Universal Any-Site Downloader**:
-  - Full support for YouTube, TikTok, Twitter/X, Instagram, Twitch, Reddit, Facebook, Vimeo, SoundCloud, and generic direct video streams (1,000+ sites).
-  - Dynamic real-time platform detection with interactive badges and presets.
-  - Added FLAC lossless audiophile audio format and WebM video formats.
-- **Master Video-to-GIF Studio**:
-  - High-fidelity 2-pass palette generation (`palettegen + paletteuse`) eliminating color banding and dithering artifacts.
-  - Retains 100% original video framerate (e.g. 60fps/30fps) and 1:1 original resolution or Lanczos rescale presets.
-  - **Looping Video with Sound**: Seamless video loop with synchronized 320kbps audio ("GIF with Sound").
-  - **Animated 24-bit WebP**: 16.7M full RGB colors and lossless compression support.
-  - **Local Video Converter**: Convert any video file from PC via native Windows file dialog or drag-and-drop.
-  - **Timestamp Segment Trimmer**: Extract custom start and end time ranges before rendering.
-- **UI & Architecture Overhaul**:
-  - Tab navigation between Universal Downloader, GIF Studio, Download History, Settings, and Live Console.
-  - Integrated 1-click Windows Explorer destination opener and responsive progress animations.
+### **v1.1.0-dev** (2026-09-29) - *The Master Media Engine & GIF Studio Update*
+- **Obsidian Glass Custom Dropdowns**:
+  - Replaced standard white Windows OS `<select>` / `<option>` menus with custom tactile dark Obsidian Glass dropdown components (`CustomDropdown.tsx`).
+  - Added support for keyboard accessibility, smooth framer-motion micro-animations, custom badge chips, and click-outside dismissal.
+- **GIF Studio & Engine Power Suite**:
+  - **Boomerang Ping-Pong Loop**: Seamless forward + reverse bounce loop filter (`concat + reverse + palettegen`).
+  - **Aspect Ratio Cropping**: Smart crop presets for `1:1 Square` (Instagram/Avatars), `9:16 Vertical` (TikTok/Shorts/Reels), `4:3 Classic TV`, and `16:9 Widescreen`.
+  - **Playback Speed Multiplier**: Multi-speed PTS manipulation (`0.5x Slowmo`, `0.75x`, `1.0x`, `1.25x`, `1.5x`, `2.0x Fast`).
+  - **Meme Caption Banners**: Classic Impact meme text rendering (`drawtext` filter with white fill and thick black stroke) for top and bottom titles.
+  - **Max File Size Targets**: Compression target presets for Discord Free (8 MB), Twitter / X (15 MB), Discord Nitro (25 MB), and Web / Telegram (50 MB).
+  - **Master 2-Pass Palettegen Filter**: Optimal 256-color palette extraction with Bayer matrix scale 5, Sierra 2-4A, and Floyd-Steinberg dithering for 60fps true-color quality.
+  - **Branding & Layout**: Refined GIF Machine branding with radiant Yellow/Amber (`#F59E0B`) accents, perfectly aligned floating navigation buttons (`-right-16` / `-left-16`), and removed redundant top return pills.
+- **Universal Downloader Power Settings**:
+  - **SponsorBlock Integration**: Automatic detection and removal of sponsor segments, intros, outros, and self-promotions.
+  - **Browser Cookie Extractor & Sync**: 1-click session cookie extraction from Google Chrome, Mozilla Firefox, Brave, Microsoft Edge, Opera, and Vivaldi.
+  - **Video Codec Prioritization**: Selectable preference for `Auto (Best)`, `H.264 / AVC (Max Compatibility)`, or `AV1 / VP9 (Max Compression)`.
+  - **Metadata & Album Art Embedding**: Embedded thumbnail and tag injection toggles for audio and video streams.
+- **Authentic OG Log Console**:
+  - Restored classic Obsidian dark terminal styling with dedicated filter chips (`All Logs`, `Engine Stream`, `Errors`), instant clipboard copy, and realtime streaming output.
 
 ### **v1.0.4** (2026-09-21)
 - **Fix**: Resolved false persistent "Update Available" notification on the Update Tool button by updating bundled `yt-dlp` core binary to the latest release (`2026.08.19`).

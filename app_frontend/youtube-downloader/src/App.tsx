@@ -3,14 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Settings, X, ChevronDown, PenLine, FolderOpen, RefreshCcw, Square, 
-  ChevronRight, ChevronLeft, Film, Sparkles, FolderCheck, HardDrive, 
-  History, Scissors, Volume2, Check, Video, Play, FileVideo, Sliders, CheckCircle2
+  Settings, X, PenLine, FolderOpen, RefreshCcw, Square, 
+  ChevronRight, ChevronLeft, Film, Sparkles, HardDrive, 
+  History, Scissors, Volume2, Check, Video, Play, Sliders,
+  Repeat, Crop, Type, Globe, Shield, Download, Cookie, CheckCircle2,
+  AlertCircle, Copy, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import ThemeEditor from './ThemeEditor';
+import CustomDropdown, { DropdownOption } from './CustomDropdown';
 
 // Native Drag-friendly Title Bar for Borderless Frame
 function CustomTitleBar({ theme }: { theme: any }) {
@@ -28,7 +30,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
     >
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold tracking-wider uppercase opacity-40" style={{ color: theme.textSecondary }}>
-          Levi's Media Downloader & GIF Machine
+          Levi's Media Downloader & GIF Machine Pro
         </span>
       </div>
       <div className="flex items-center gap-1">
@@ -64,9 +66,17 @@ export default function App() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
   
+  // Downloader Settings State
   const [playlistMode, setPlaylistMode] = useState(false);
   const [showPlaylistPopup, setShowPlaylistPopup] = useState(false);
   const [quality, setQuality] = useState('Best');
+  const [sponsorBlock, setSponsorBlock] = useState(false);
+  const [browserCookies, setBrowserCookies] = useState('none');
+  const [embedMetadata, setEmbedMetadata] = useState(true);
+  const [videoCodec, setVideoCodec] = useState('auto');
+  const [maxFileSize, setMaxFileSize] = useState('none');
+
+  // Update Status State
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     update_available: boolean;
@@ -88,6 +98,12 @@ export default function App() {
   const [gifScale, setGifScale] = useState('original');
   const [gifDither, setGifDither] = useState('bayer');
   const [gifAudioLoop, setGifAudioLoop] = useState(false);
+  const [gifBoomerang, setGifBoomerang] = useState(false);
+  const [gifCrop, setGifCrop] = useState('none');
+  const [gifSpeed, setGifSpeed] = useState('1.0');
+  const [gifMemeTop, setGifMemeTop] = useState('');
+  const [gifMemeBottom, setGifMemeBottom] = useState('');
+  const [gifMaxFileSize, setGifMaxFileSize] = useState('none');
 
   // Pull real history items
   const fetchHistory = () => {
@@ -147,52 +163,57 @@ export default function App() {
     fetch('/api/settings')
       .then(r => r.json())
       .then(d => {
-        if(d.quality) setQuality(d.quality);
-        if(d.playlistMode !== undefined) setPlaylistMode(d.playlistMode);
-        if(d.gifFps) setGifFps(d.gifFps);
-        if(d.gifScale) setGifScale(d.gifScale);
-        if(d.gifDither) setGifDither(d.gifDither);
-        if(d.gifAudioLoop !== undefined) setGifAudioLoop(d.gifAudioLoop);
-      }).catch(e => console.log("Engine starting..."));
+        if (d.quality) setQuality(d.quality);
+        if (d.playlistMode !== undefined) setPlaylistMode(d.playlistMode);
+        if (d.gifFps) setGifFps(d.gifFps);
+        if (d.gifScale) setGifScale(d.gifScale);
+        if (d.gifDither) setGifDither(d.gifDither);
+        if (d.gifAudioLoop !== undefined) setGifAudioLoop(d.gifAudioLoop);
+        if (d.sponsorBlock !== undefined) setSponsorBlock(d.sponsorBlock);
+        if (d.browserCookies) setBrowserCookies(d.browserCookies);
+        if (d.embedMetadata !== undefined) setEmbedMetadata(d.embedMetadata);
+        if (d.videoCodec) setVideoCodec(d.videoCodec);
+        if (d.gifMaxFileSize) setGifMaxFileSize(d.gifMaxFileSize);
+      })
+      .catch(() => {});
   }, []);
 
-  const saveSetting = (key: string, value: any) => {
+  const saveSettings = (updated: any) => {
     fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [key]: value })
-    }).catch(e => console.log("Waiting for backend..."));
+      body: JSON.stringify(updated)
+    }).catch(() => {});
   };
 
-  const handleQualityChange = (val: string) => { setQuality(val); saveSetting('quality', val); };
-  const handlePlaylistModeChange = (val: boolean) => { setPlaylistMode(val); saveSetting('playlistMode', val); };
-  const handleGifFpsChange = (val: string) => { setGifFps(val); saveSetting('gifFps', val); };
-  const handleGifScaleChange = (val: string) => { setGifScale(val); saveSetting('gifScale', val); };
-  const handleGifDitherChange = (val: string) => { setGifDither(val); saveSetting('gifDither', val); };
-  const handleGifAudioLoopChange = (val: boolean) => { setGifAudioLoop(val); saveSetting('gifAudioLoop', val); };
+  const handleQualityChange = (q: string) => { setQuality(q); saveSettings({ quality: q }); };
+  const handlePlaylistModeChange = (p: boolean) => { setPlaylistMode(p); saveSettings({ playlistMode: p }); };
+  const handleGifFpsChange = (f: string) => { setGifFps(f); saveSettings({ gifFps: f }); };
+  const handleGifScaleChange = (s: string) => { setGifScale(s); saveSettings({ gifScale: s }); };
+  const handleGifDitherChange = (d: string) => { setGifDither(d); saveSettings({ gifDither: d }); };
+  const handleGifAudioLoopChange = (a: boolean) => { setGifAudioLoop(a); saveSettings({ gifAudioLoop: a }); };
+  const handleSponsorBlockChange = (sb: boolean) => { setSponsorBlock(sb); saveSettings({ sponsorBlock: sb }); };
+  const handleBrowserCookiesChange = (b: string) => { setBrowserCookies(b); saveSettings({ browserCookies: b }); };
+  const handleEmbedMetadataChange = (m: boolean) => { setEmbedMetadata(m); saveSettings({ embedMetadata: m }); };
+  const handleVideoCodecChange = (vc: string) => { setVideoCodec(vc); saveSettings({ videoCodec: vc }); };
+  const handleGifMaxFileSizeChange = (m: string) => { setGifMaxFileSize(m); saveSettings({ gifMaxFileSize: m }); };
 
-  // Switch to Main or GIF Machine and record section
-  const handleSwitchToMain = () => {
-    setActiveSection('downloader');
-    setActiveView('main');
-  };
-
+  // View switches
   const handleSwitchToGif = () => {
     setActiveSection('gif');
     setActiveView('gif_machine');
   };
 
-  // Real Download Initialization
+  const handleSwitchToMain = () => {
+    setActiveSection('downloader');
+    setActiveView('main');
+  };
+
+  // Start Real Universal Download
   const startRealDownload = async (format: string) => {
     if (!url || isDownloading) return;
-    
-    if (url.toLowerCase() === 'error') {
-      setDownloadError(true);
-      return;
-    }
-
     setIsDownloading(true);
-    setDownloadError(false); 
+    setDownloadError(false);
 
     try {
       const response = await fetch('/api/download', {
@@ -203,7 +224,12 @@ export default function App() {
           format: format, 
           quality: quality, 
           customName: customName,
-          playlistMode: playlistMode 
+          playlistMode: playlistMode,
+          sponsorBlock: sponsorBlock,
+          browserCookies: browserCookies,
+          embedMetadata: embedMetadata,
+          videoCodec: videoCodec,
+          maxFileSize: maxFileSize
         })
       });
       const data = await response.json();
@@ -237,11 +263,12 @@ export default function App() {
     }
   };
 
-  const [theme, setTheme] = useState({
+  const theme = {
     bg: '#212128',
     textMain: '#D9D9D9',
     textSecondary: '#D9D9D9',
     accent: '#FF0033',
+    gifAccent: '#F59E0B',
     inputBg: '#e2e2e8',
     inputText: '#222222',
     btnLightBg: '#e2e2e8',
@@ -253,7 +280,9 @@ export default function App() {
     panelOuter: '#292a34',
     panelInner: '#202128',
     settingsBtnBg: '#292a33',
-  });
+  };
+
+  const isGifActive = activeView === 'gif_machine' || (activeSection === 'gif' && ['settings', 'log'].includes(activeView));
 
   return (
     <div 
@@ -268,17 +297,17 @@ export default function App() {
         {/* Dynamic Glowing Title */}
         <div className="relative mb-0 mt-2 flex flex-col items-center">
           <h1 
-            className="text-[58px] font-medium tracking-tight mb-1 select-none relative backdrop-blur-[2px] border py-1.5 px-10 rounded-3xl mix-blend-screen text-center"
+            className="text-[58px] font-medium tracking-tight mb-1 select-none relative backdrop-blur-[2px] border py-1.5 px-10 rounded-3xl mix-blend-screen text-center transition-all duration-300"
             style={{ 
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
               borderColor: 'rgba(255, 255, 255, 0.1)',
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 8px 20px rgba(0,0,0,0.2)'
             }}
           >
-            {activeView === 'gif_machine' || (activeSection === 'gif' && ['settings', 'log'].includes(activeView)) ? (
+            {isGifActive ? (
               <>
                 <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>Advanced </span>
-                <span style={{ color: theme.accent, textShadow: `0 2px 10px ${theme.accent}88` }}>GIF</span>
+                <span style={{ color: theme.gifAccent, textShadow: `0 2px 14px ${theme.gifAccent}aa` }}>GIF</span>
                 <span style={{ color: theme.textSecondary, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}> Machine</span>
               </>
             ) : (
@@ -353,6 +382,18 @@ export default function App() {
                   setScale={handleGifScaleChange}
                   dither={gifDither}
                   setDither={handleGifDitherChange}
+                  boomerang={gifBoomerang}
+                  setBoomerang={setGifBoomerang}
+                  crop={gifCrop}
+                  setCrop={setGifCrop}
+                  speed={gifSpeed}
+                  setSpeed={setGifSpeed}
+                  memeTop={gifMemeTop}
+                  setMemeTop={setGifMemeTop}
+                  memeBottom={gifMemeBottom}
+                  setMemeBottom={setGifMemeBottom}
+                  maxFileSize={gifMaxFileSize}
+                  setMaxFileSize={handleGifMaxFileSizeChange}
                 />
               </motion.div>
             )}
@@ -374,6 +415,14 @@ export default function App() {
                   setPlaylistMode={handlePlaylistModeChange} 
                   quality={quality}
                   setQuality={handleQualityChange}
+                  sponsorBlock={sponsorBlock}
+                  setSponsorBlock={handleSponsorBlockChange}
+                  browserCookies={browserCookies}
+                  setBrowserCookies={handleBrowserCookiesChange}
+                  embedMetadata={embedMetadata}
+                  setEmbedMetadata={handleEmbedMetadataChange}
+                  videoCodec={videoCodec}
+                  setVideoCodec={handleVideoCodecChange}
                   gifFps={gifFps}
                   setGifFps={handleGifFpsChange}
                   gifScale={gifScale}
@@ -382,6 +431,8 @@ export default function App() {
                   setGifDither={handleGifDitherChange}
                   gifAudioLoop={gifAudioLoop}
                   setGifAudioLoop={handleGifAudioLoopChange}
+                  gifMaxFileSize={gifMaxFileSize}
+                  setGifMaxFileSize={handleGifMaxFileSizeChange}
                   changeDownloadFolder={changeDownloadFolder}
                   historyItems={historyItems}
                 />
@@ -436,14 +487,14 @@ export default function App() {
             style={{ 
               width: '60px', 
               height: '60px', 
-              backgroundColor: activeView === 'settings' ? `${theme.accent}22` : theme.btnDarkBg, 
-              color: activeView === 'settings' ? theme.accent : theme.btnDarkText, 
-              borderColor: activeView === 'settings' ? `${theme.accent}66` : 'rgba(255,255,255,0.05)',
+              backgroundColor: activeView === 'settings' ? `${isGifActive ? theme.gifAccent : theme.accent}22` : theme.btnDarkBg, 
+              color: activeView === 'settings' ? (isGifActive ? theme.gifAccent : theme.accent) : theme.btnDarkText, 
+              borderColor: activeView === 'settings' ? `${isGifActive ? theme.gifAccent : theme.accent}66` : 'rgba(255,255,255,0.05)',
               boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` 
             }}
             title={activeSection === 'gif' ? "GIF Machine Settings" : "Downloader Settings"}
           >
-            <Settings strokeWidth={1.5} size={30} style={activeView === 'settings' ? { filter: `drop-shadow(0 2px 8px ${theme.accent}88)` } : {}} />
+            <Settings strokeWidth={1.5} size={30} style={activeView === 'settings' ? { filter: `drop-shadow(0 2px 8px ${isGifActive ? theme.gifAccent : theme.accent}88)` } : {}} />
           </button>
 
           <button 
@@ -452,16 +503,16 @@ export default function App() {
             style={{ 
               width: '60px', 
               height: '60px', 
-              backgroundColor: activeView === 'log' ? `${theme.accent}22` : theme.btnDarkBg, 
-              color: activeView === 'log' ? theme.accent : theme.btnDarkText, 
-              borderColor: activeView === 'log' ? `${theme.accent}66` : 'rgba(255,255,255,0.05)',
+              backgroundColor: activeView === 'log' ? `${isGifActive ? theme.gifAccent : theme.accent}22` : theme.btnDarkBg, 
+              color: activeView === 'log' ? (isGifActive ? theme.gifAccent : theme.accent) : theme.btnDarkText, 
+              borderColor: activeView === 'log' ? `${isGifActive ? theme.gifAccent : theme.accent}66` : 'rgba(255,255,255,0.05)',
               boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` 
             }}
             title={activeSection === 'gif' ? "GIF Machine Logs" : "Downloader Logs"}
           >
             <span 
               className="uppercase tracking-widest pl-[0.1em]"
-              style={activeView === 'log' ? { textShadow: `0 2px 10px ${theme.accent}88` } : {}}
+              style={activeView === 'log' ? { textShadow: `0 2px 10px ${isGifActive ? theme.gifAccent : theme.accent}88` } : {}}
             >
               Log
             </span>
@@ -520,7 +571,7 @@ export default function App() {
                 </div>
                 <button onClick={() => setDownloadError(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
               </div>
-              <p className="text-sm font-medium relative z-10 w-[240px] leading-relaxed" style={{ color: theme.textSecondary }}>The process encountered an error. Please try updating the tool and trying again.</p>
+              <p className="text-sm font-medium relative z-10 w-[240px] leading-relaxed" style={{ color: theme.textSecondary }}>The process encountered an error. Please check the logs or update the tool.</p>
               <button
                  onClick={() => { setDownloadError(false); handleUpdate(); }}
                  className="mt-2 font-bold py-2.5 px-4 rounded-2xl transition-all active:translate-y-[2px]"
@@ -561,7 +612,7 @@ export default function App() {
 }
 
 // -------------------------------------------------------------
-// ORIGINAL PAGE 1 VIEW: Faithful 100% OG Layout + Clean Stylized Right Arrow
+// ORIGINAL PAGE 1 VIEW: Faithful 100% OG Layout + Stylized Right Arrow
 // -------------------------------------------------------------
 function MainView({ url, setUrl, theme, playlistMode, setActiveView, handleSwitchToGif, startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, setDownloadError, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, showUpdatePopup, setShowUpdatePopup }: any) {
   const [progress, setProgress] = useState(0);
@@ -623,25 +674,25 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, handleSwitc
   return (
     <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8 my-auto">
       
-      {/* Stylized Floating Right Arrow to GIF Machine (Clean - No Star, Pushed Way Right, Matching '& Video' Glow) */}
+      {/* Stylized Floating Right Arrow to GIF Machine (Mimics Back button distance -right-16, Yellow Accent & Glow) */}
       <div 
-        className="absolute -right-52 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40" 
+        className="absolute -right-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40" 
         onClick={handleSwitchToGif}
       >
         <button 
           className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
           style={{ 
             backgroundColor: theme.btnDarkBg, 
-            color: theme.accent,
-            border: `1px solid rgba(255,255,255,0.06)`,
+            color: theme.gifAccent,
+            border: `1px solid rgba(245, 158, 11, 0.25)`,
             boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)` 
           }}
           title="Switch to Advanced GIF Machine"
         >
-          <ChevronRight size={28} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" style={{ color: theme.accent, filter: `drop-shadow(0 2px 8px ${theme.accent}88)` }} />
+          <ChevronRight size={28} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" style={{ color: theme.gifAccent, filter: `drop-shadow(0 2px 8px ${theme.gifAccent}88)` }} />
           <span 
             className="text-[11px] font-black uppercase tracking-wider"
-            style={{ color: theme.accent, textShadow: `0 2px 10px ${theme.accent}88` }}
+            style={{ color: theme.gifAccent, textShadow: `0 2px 10px ${theme.gifAccent}aa` }}
           >
             GIF
           </span>
@@ -733,8 +784,16 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, handleSwitc
 
 // -------------------------------------------------------------
 // ADVANCED GIF MACHINE: Import video, pick from downloads, 2-pass master quality
+// Boomerang, Cropping, Speed, Meme Banners, Max File Size
 // -------------------------------------------------------------
-function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, historyItems, fetchHistory, url, setUrl, isDownloading, setIsDownloading, setDownloadError, fps, setFps, scale, setScale, dither, setDither }: any) {
+function AdvancedGifMachineView({ 
+  theme, setActiveView, handleSwitchToMain, historyItems, fetchHistory, 
+  url, setUrl, isDownloading, setIsDownloading, setDownloadError, 
+  fps, setFps, scale, setScale, dither, setDither,
+  boomerang, setBoomerang, crop, setCrop, speed, setSpeed,
+  memeTop, setMemeTop, memeBottom, setMemeBottom,
+  maxFileSize, setMaxFileSize
+}: any) {
   const [selectedSourceType, setSelectedSourceType] = useState<'local' | 'history' | 'url'>('local');
   const [localFilePath, setLocalFilePath] = useState('');
   const [localFileInfo, setLocalFileInfo] = useState<any>(null);
@@ -744,6 +803,7 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
   const [startTime, setStartTime] = useState('00:00:00');
   const [endTime, setEndTime] = useState('00:00:10');
   const [customGifName, setCustomGifName] = useState('');
+  const [showMemeInputs, setShowMemeInputs] = useState(false);
 
   // Customizable Quality Settings Modal
   const [showQualityModal, setShowQualityModal] = useState(false);
@@ -793,7 +853,13 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
             endTime: endTime,
             fps: fps,
             scale: scale,
-            dither: dither
+            dither: dither,
+            boomerang: boomerang,
+            crop: crop,
+            speed: speed,
+            memeTop: memeTop,
+            memeBottom: memeBottom,
+            maxFileSize: maxFileSize
           })
         });
         const data = await res.json();
@@ -813,7 +879,13 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
             endTime: endTime,
             fps: fps,
             scale: scale,
-            dither: dither
+            dither: dither,
+            boomerang: boomerang,
+            crop: crop,
+            speed: speed,
+            memeTop: memeTop,
+            memeBottom: memeBottom,
+            maxFileSize: maxFileSize
           })
         });
         const data = await res.json();
@@ -836,10 +908,35 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
 
   const qualitySummary = `${fps === 'original' ? 'Original FPS' : `${fps} FPS`} · ${scale === 'original' ? '100% Res' : scale}`;
 
+  // Dropdown options
+  const cropOptions: DropdownOption[] = [
+    { value: 'none', label: 'No Crop (Original Aspect)' },
+    { value: '1:1', label: '1:1 Square', badge: 'Avatar / IG' },
+    { value: '9:16', label: '9:16 Vertical', badge: 'TikTok / Shorts' },
+    { value: '4:3', label: '4:3 Classic TV' },
+  ];
+
+  const speedOptions: DropdownOption[] = [
+    { value: '0.5', label: '0.5x Slowmo' },
+    { value: '0.75', label: '0.75x Speed' },
+    { value: '1.0', label: '1.0x Normal Speed' },
+    { value: '1.25', label: '1.25x Speed' },
+    { value: '1.5', label: '1.5x Fast' },
+    { value: '2.0', label: '2.0x 2x Speed' },
+  ];
+
+  const maxFileSizeOptions: DropdownOption[] = [
+    { value: 'none', label: 'No Limit (Max Fidelity)' },
+    { value: '8M', label: 'Discord Free (8 MB)', badge: '8MB' },
+    { value: '15M', label: 'Twitter / X (15 MB)', badge: '15MB' },
+    { value: '25M', label: 'Discord Nitro (25 MB)', badge: '25MB' },
+    { value: '50M', label: 'Web / Telegram (50 MB)', badge: '50MB' },
+  ];
+
   return (
     <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
       
-      {/* Stylized Left Arrow to return to Downloader (Restored Snug Horizontal Position & Matching Vertical Height & Glow) */}
+      {/* Stylized Left Arrow to return to Downloader (Matching -left-16 snug position & Yellow GIF Accent) */}
       <div 
         onClick={handleSwitchToMain}
         className="absolute -left-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40"
@@ -848,16 +945,16 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
           className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
           style={{ 
             backgroundColor: theme.btnDarkBg, 
-            color: theme.accent,
-            border: `1px solid rgba(255,255,255,0.06)`,
+            color: theme.gifAccent,
+            border: `1px solid rgba(245, 158, 11, 0.25)`,
             boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)` 
           }}
           title="Back to Downloader"
         >
-          <ChevronLeft size={28} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" style={{ color: theme.accent, filter: `drop-shadow(0 2px 8px ${theme.accent}88)` }} />
+          <ChevronLeft size={28} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" style={{ color: theme.gifAccent, filter: `drop-shadow(0 2px 8px ${theme.gifAccent}88)` }} />
           <span 
             className="text-[11px] font-black uppercase tracking-wider"
-            style={{ color: theme.accent, textShadow: `0 2px 10px ${theme.accent}88` }}
+            style={{ color: theme.gifAccent, textShadow: `0 2px 10px ${theme.gifAccent}aa` }}
           >
             Back
           </span>
@@ -871,20 +968,19 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
           <div className="flex items-center justify-between gap-3 mb-4 w-full">
             <h2 className="text-[22px] font-bold whitespace-nowrap text-white">1. Choose Video Source</h2>
             
-            {/* Clickable Custom Quality Pill Button with Subtle Glow */}
+            {/* Clickable Custom Quality Pill Button with Subtle Yellow Glow */}
             <button 
               onClick={() => setShowQualityModal(true)}
               className="px-3 py-1.5 rounded-full font-bold text-xs whitespace-nowrap border hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm"
               style={{
                 backgroundColor: 'rgba(255,255,255,0.06)',
-                borderColor: `${theme.accent}66`,
+                borderColor: `${theme.gifAccent}66`,
                 color: theme.textMain
               }}
               title="Click to customize FFmpeg video quality, framerate & dithering"
             >
-              <Sliders size={13} style={{ color: theme.accent }} />
-              <span style={{ textShadow: `0 1px 6px ${theme.accent}44` }}>{qualitySummary}</span>
-              <ChevronDown size={14} className="opacity-70" />
+              <Sliders size={13} style={{ color: theme.gifAccent }} />
+              <span style={{ textShadow: `0 1px 6px ${theme.gifAccent}44` }}>{qualitySummary}</span>
             </button>
           </div>
 
@@ -897,7 +993,7 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
               }`}
             >
               <div className="flex items-center gap-3 truncate">
-                <div className="p-2 rounded-lg bg-white/10" style={{ color: theme.accent }}>
+                <div className="p-2 rounded-lg bg-white/10" style={{ color: theme.gifAccent }}>
                   <HardDrive size={18} />
                 </div>
                 <div className="truncate">
@@ -907,14 +1003,14 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
                   </div>
                 </div>
               </div>
-              <FolderOpen size={18} style={{ color: theme.accent }} className="shrink-0 ml-2" />
+              <FolderOpen size={18} style={{ color: theme.gifAccent }} className="shrink-0 ml-2" />
             </button>
 
             {/* Option B: Pick From Downloaded Ones */}
             <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-bold text-white">
-                  <History size={16} className="text-blue-400" />
+                  <History size={16} className="text-amber-400" />
                   <span>Pick From Downloaded Videos:</span>
                 </div>
               </div>
@@ -937,7 +1033,7 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
                     >
                       <span className="truncate">{v.filename}</span>
                       {selectedSourceType === 'history' && selectedHistoryFile === v.filename && (
-                        <Check size={14} style={{ color: theme.accent }} className="shrink-0 ml-1" />
+                        <Check size={14} style={{ color: theme.gifAccent }} className="shrink-0 ml-1" />
                       )}
                     </div>
                   ))}
@@ -950,7 +1046,7 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
             {/* Option C: Direct Web Link */}
             <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Film size={16} className="text-purple-400" />
+                <Film size={16} className="text-yellow-400" />
                 <span>Or From Current URL:</span>
               </div>
               <input 
@@ -969,24 +1065,24 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
 
         {/* Selected Source Status */}
         <div className="text-xs font-mono opacity-60 truncate">
-          Active Source: <strong style={{ color: theme.accent }} className="font-bold">{selectedSourceType.toUpperCase()}</strong>
+          Active Source: <strong style={{ color: theme.gifAccent }} className="font-bold">{selectedSourceType.toUpperCase()}</strong>
         </div>
       </div>
 
-      {/* Right Panel: Advanced 2-Pass Palettegen & Render Controls */}
+      {/* Right Panel: Advanced 2-Pass Palettegen & Power Controls */}
       <div className="flex-[1.2] rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[22px] font-bold whitespace-nowrap" style={{ color: theme.textMain }}>2. GIF Output & Trimmer</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[22px] font-bold whitespace-nowrap" style={{ color: theme.textMain }}>2. GIF Output & Engine</h2>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             {/* Format Selection */}
             <div className="flex gap-2">
               <button 
                 onClick={() => setGifFormat('gif')}
-                className={`flex-1 py-2.5 px-3 rounded-xl border text-center transition-all ${
-                  gifFormat === 'gif' ? 'bg-white/15 border-white/30 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
+                className={`flex-1 py-2 px-3 rounded-xl border text-center transition-all ${
+                  gifFormat === 'gif' ? 'bg-white/15 border-amber-500/40 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
                 }`}
               >
                 <div className="text-xs font-bold" style={{ color: theme.textMain }}>Master GIF (.gif)</div>
@@ -995,8 +1091,8 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
 
               <button 
                 onClick={() => setGifFormat('loop_mp4')}
-                className={`flex-1 py-2.5 px-3 rounded-xl border text-center transition-all ${
-                  gifFormat === 'loop_mp4' ? 'bg-white/15 border-white/30 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
+                className={`flex-1 py-2 px-3 rounded-xl border text-center transition-all ${
+                  gifFormat === 'loop_mp4' ? 'bg-white/15 border-amber-500/40 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
                 }`}
               >
                 <div className="text-xs font-bold flex items-center justify-center gap-1" style={{ color: theme.textMain }}>
@@ -1007,8 +1103,8 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
             </div>
 
             {/* Trimming Start & End */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-xs font-bold" style={{ color: theme.accent }}>
+            <div className="p-2.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 text-xs font-bold" style={{ color: theme.gifAccent }}>
                 <Scissors size={14} />
                 <span>Timestamp Trimmer (Start / End):</span>
               </div>
@@ -1037,39 +1133,131 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
               </div>
             </div>
 
+            {/* Power Tools Row: Boomerang, Crop, Speed, Meme Toggle */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Boomerang Ping-Pong Loop Toggle */}
+              <button
+                onClick={() => setBoomerang(!boomerang)}
+                className={`p-2 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
+                  boomerang ? 'bg-amber-500/20 border-amber-500/50 text-white' : 'bg-white/5 border-white/5 text-gray-300 hover:bg-white/10'
+                }`}
+                title="Ping-pong loop: plays forward then seamlessly reverses"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Repeat size={14} style={{ color: theme.gifAccent }} />
+                  <span>Boomerang Loop</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${boomerang ? 'bg-amber-500 text-black font-extrabold' : 'bg-white/10 opacity-60'}`}>
+                  {boomerang ? 'ON' : 'OFF'}
+                </span>
+              </button>
+
+              {/* Aspect Ratio Crop Dropdown */}
+              <div className="flex items-center gap-1 bg-white/5 border border-white/5 p-1 rounded-xl">
+                <Crop size={14} style={{ color: theme.gifAccent }} className="ml-1.5 shrink-0" />
+                <CustomDropdown 
+                  value={crop}
+                  options={cropOptions}
+                  onChange={setCrop}
+                  theme={theme}
+                  variant="tactile-dark"
+                  size="sm"
+                  accentColor={theme.gifAccent}
+                  className="flex-1"
+                />
+              </div>
+
+              {/* Speed Multiplier Dropdown */}
+              <div className="flex items-center gap-1 bg-white/5 border border-white/5 p-1 rounded-xl">
+                <Play size={14} style={{ color: theme.gifAccent }} className="ml-1.5 shrink-0" />
+                <CustomDropdown 
+                  value={speed}
+                  options={speedOptions}
+                  onChange={setSpeed}
+                  theme={theme}
+                  variant="tactile-dark"
+                  size="sm"
+                  accentColor={theme.gifAccent}
+                  className="flex-1"
+                />
+              </div>
+
+              {/* Meme Text Overlay Toggle */}
+              <button
+                onClick={() => setShowMemeInputs(!showMemeInputs)}
+                className={`p-2 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
+                  showMemeInputs || memeTop || memeBottom ? 'bg-amber-500/20 border-amber-500/50 text-white' : 'bg-white/5 border-white/5 text-gray-300 hover:bg-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Type size={14} style={{ color: theme.gifAccent }} />
+                  <span>Meme Caption</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${(memeTop || memeBottom) ? 'bg-amber-500 text-black font-extrabold' : 'bg-white/10 opacity-60'}`}>
+                  {(memeTop || memeBottom) ? 'SET' : 'OFF'}
+                </span>
+              </button>
+            </div>
+
+            {/* Collapsible Meme Banner Inputs */}
+            <AnimatePresence>
+              {showMemeInputs && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex flex-col gap-1.5 overflow-hidden p-2 rounded-xl bg-black/40 border border-white/10"
+                >
+                  <input 
+                    type="text" 
+                    placeholder="Top Meme Text (e.g. WHEN YOU CODE)..."
+                    value={memeTop}
+                    onChange={e => setMemeTop(e.target.value)}
+                    className="w-full px-2.5 py-1 rounded-lg bg-black/60 border border-white/10 text-xs text-white outline-none placeholder:opacity-40 uppercase"
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Bottom Meme Text (e.g. AND IT COMPILES)..."
+                    value={memeBottom}
+                    onChange={e => setMemeBottom(e.target.value)}
+                    className="w-full px-2.5 py-1 rounded-lg bg-black/60 border border-white/10 text-xs text-white outline-none placeholder:opacity-40 uppercase"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Custom Output Name */}
             <div className="flex flex-col gap-1">
-              <span className="text-xs opacity-70">Custom GIF Name (optional):</span>
               <input 
                 type="text" 
-                placeholder="Auto-generated if left empty..."
+                placeholder="Custom GIF Name (auto-generated if empty)..."
                 value={customGifName}
                 onChange={e => setCustomGifName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white outline-none"
+                className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white outline-none"
               />
             </div>
           </div>
         </div>
 
         {/* Big 3D Tactile Render Button */}
-        <div className="pt-4">
+        <div className="pt-2">
           <button 
             onClick={handleStartGifRender}
             disabled={isDownloading || (selectedSourceType === 'local' && !localFilePath) || (selectedSourceType === 'history' && !selectedHistoryFile) || (selectedSourceType === 'url' && !url)}
-            className="w-full py-4 rounded-2xl font-extrabold uppercase tracking-widest text-[20px] transition-all active:translate-y-[4px] shadow-2xl flex items-center justify-center gap-2 disabled:opacity-40"
+            className="w-full py-3.5 rounded-2xl font-extrabold uppercase tracking-widest text-[19px] transition-all active:translate-y-[4px] shadow-2xl flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ 
               backgroundColor: theme.btnLightBg, 
               color: theme.btnLightText, 
               boxShadow: `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.3)` 
             }}
           >
-            <Sparkles size={22} style={{ color: theme.accent }} />
+            <Sparkles size={22} style={{ color: theme.gifAccent }} />
             <span>{isDownloading ? 'Rendering Master GIF...' : 'Render Master GIF'}</span>
           </button>
         </div>
       </div>
 
-      {/* FFmpeg Quality Customization Popover / Modal */}
+      {/* FFmpeg Quality Customization Popover / Modal with Custom Obsidian Dropdowns */}
       <AnimatePresence>
         {showQualityModal && (
           <motion.div 
@@ -1082,11 +1270,11 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
               initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-[480px] p-6 rounded-[24px] shadow-2xl flex flex-col gap-5 border border-white/10"
+              className="w-[500px] p-6 rounded-[24px] shadow-2xl flex flex-col gap-5 border border-white/10"
               style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
             >
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2 text-base font-bold" style={{ color: theme.accent }}>
+                <div className="flex items-center gap-2 text-base font-bold" style={{ color: theme.gifAccent }}>
                   <Sliders size={18} />
                   <span>FFmpeg Master Quality Configuration</span>
                 </div>
@@ -1099,57 +1287,83 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
                 {/* Framerate Selection */}
                 <div className="flex flex-col gap-1.5">
                   <span className="opacity-80 font-bold">1. Target Framerate (FPS):</span>
-                  <select 
-                    value={fps} 
-                    onChange={e => setFps(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 font-bold text-white outline-none cursor-pointer"
-                  >
-                    <option value="original">Preserve Original FPS (100% Full Smoothness)</option>
-                    <option value="60">60 FPS (Ultra Smooth Gamer Fidelity)</option>
-                    <option value="50">50 FPS (PAL High Speed)</option>
-                    <option value="30">30 FPS (Standard Web Frame Rate)</option>
-                    <option value="24">24 FPS (Cinematic Look)</option>
-                    <option value="15">15 FPS (Compact File Size)</option>
-                  </select>
+                  <CustomDropdown 
+                    value={fps}
+                    options={[
+                      { value: 'original', label: 'Preserve Original FPS', badge: '100% Smooth' },
+                      { value: '60', label: '60 FPS', badge: 'Ultra Gamer' },
+                      { value: '50', label: '50 FPS (PAL High Speed)' },
+                      { value: '30', label: '30 FPS (Standard Web)' },
+                      { value: '24', label: '24 FPS (Cinematic Look)' },
+                      { value: '15', label: '15 FPS (Compact File Size)' },
+                    ]}
+                    onChange={setFps}
+                    theme={theme}
+                    variant="tactile-dark"
+                    accentColor={theme.gifAccent}
+                    className="w-full"
+                  />
                 </div>
 
                 {/* Resolution / Scale Selection */}
                 <div className="flex flex-col gap-1.5">
                   <span className="opacity-80 font-bold">2. Video Resolution (Lanczos Scale):</span>
-                  <select 
-                    value={scale} 
-                    onChange={e => setScale(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 font-bold text-white outline-none cursor-pointer"
-                  >
-                    <option value="original">Original Source Resolution (1:1 Exact Pixel Match)</option>
-                    <option value="1080p">1080p Full HD (Downscale with Lanczos Filter)</option>
-                    <option value="720p">720p HD (Balanced Quality & Size)</option>
-                    <option value="480p">480p Standard (Medium GIF Size)</option>
-                    <option value="360p">360p Lightweight (Small Discord / Chat Size)</option>
-                  </select>
+                  <CustomDropdown 
+                    value={scale}
+                    options={[
+                      { value: 'original', label: 'Original Source Resolution', badge: '1:1 Pixel Match' },
+                      { value: '1080p', label: '1080p Full HD (Lanczos Filter)' },
+                      { value: '720p', label: '720p HD (Balanced Quality)' },
+                      { value: '480p', label: '480p Standard (Medium GIF)' },
+                      { value: '360p', label: '360p Lightweight (Small Discord)' },
+                    ]}
+                    onChange={setScale}
+                    theme={theme}
+                    variant="tactile-dark"
+                    accentColor={theme.gifAccent}
+                    className="w-full"
+                  />
                 </div>
 
                 {/* Dithering & Palette Matrix */}
                 <div className="flex flex-col gap-1.5">
                   <span className="opacity-80 font-bold">3. Color Palette & Dithering Algorithm:</span>
-                  <select 
-                    value={dither} 
-                    onChange={e => setDither(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 font-bold text-white outline-none cursor-pointer"
-                  >
-                    <option value="bayer">Bayer Matrix Scale 5 (Master Crisp Dither - Recommended)</option>
-                    <option value="sierra">Sierra 2-4A (Smooth Gradients & Zero Banding)</option>
-                    <option value="floyd">Floyd-Steinberg (Classic Precision)</option>
-                    <option value="none">No Dither (Hard Edge / Cartoon Style)</option>
-                  </select>
+                  <CustomDropdown 
+                    value={dither}
+                    options={[
+                      { value: 'bayer', label: 'Bayer Matrix Scale 5', badge: 'Recommended' },
+                      { value: 'sierra', label: 'Sierra 2-4A (Smooth Gradients)' },
+                      { value: 'floyd', label: 'Floyd-Steinberg (Classic Precision)' },
+                      { value: 'none', label: 'No Dither (Hard Edge / Cartoon)' },
+                    ]}
+                    onChange={setDither}
+                    theme={theme}
+                    variant="tactile-dark"
+                    accentColor={theme.gifAccent}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Max File Size Limit */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="opacity-80 font-bold">4. Max File Size Target:</span>
+                  <CustomDropdown 
+                    value={maxFileSize}
+                    options={maxFileSizeOptions}
+                    onChange={setMaxFileSize}
+                    theme={theme}
+                    variant="tactile-dark"
+                    accentColor={theme.gifAccent}
+                    className="w-full"
+                  />
                 </div>
               </div>
 
               <div className="pt-2 border-t border-white/10">
                 <button 
                   onClick={() => setShowQualityModal(false)}
-                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-wider text-white shadow-lg transition-all active:scale-[0.98]"
-                  style={{ backgroundColor: theme.accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 #99001b` }}
+                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-wider text-black shadow-lg transition-all active:scale-[0.98]"
+                  style={{ backgroundColor: theme.gifAccent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 #b45309` }}
                 >
                   Save Quality Settings
                 </button>
@@ -1164,9 +1378,52 @@ function AdvancedGifMachineView({ theme, setActiveView, handleSwitchToMain, hist
 
 // -------------------------------------------------------------
 // CONTEXTUAL SETTINGS VIEW: Dedicated GIF Settings vs Downloader Settings
+// Clean custom dropdowns, SponsorBlock, Cookie Extractor, Codec Priority
 // -------------------------------------------------------------
-function SettingsView({ theme, activeSection, setActiveView, playlistMode, setPlaylistMode, quality, setQuality, gifFps, setGifFps, gifScale, setGifScale, gifDither, setGifDither, gifAudioLoop, setGifAudioLoop, changeDownloadFolder, historyItems }: any) {
+function SettingsView({ 
+  theme, activeSection, setActiveView, 
+  playlistMode, setPlaylistMode, 
+  quality, setQuality,
+  sponsorBlock, setSponsorBlock,
+  browserCookies, setBrowserCookies,
+  embedMetadata, setEmbedMetadata,
+  videoCodec, setVideoCodec,
+  gifFps, setGifFps, 
+  gifScale, setGifScale, 
+  gifDither, setGifDither, 
+  gifAudioLoop, setGifAudioLoop, 
+  gifMaxFileSize, setGifMaxFileSize,
+  changeDownloadFolder, historyItems 
+}: any) {
   const isGifSection = activeSection === 'gif';
+  const accentColor = isGifSection ? theme.gifAccent : theme.accent;
+
+  const [cookieSyncStatus, setCookieSyncStatus] = useState<string | null>(null);
+  const [isSyncingCookies, setIsSyncingCookies] = useState(false);
+
+  const handleSyncBrowserCookies = async (browser: string) => {
+    if (isSyncingCookies) return;
+    setIsSyncingCookies(true);
+    setCookieSyncStatus(`Syncing from ${browser}...`);
+    try {
+      const res = await fetch('/api/sync_cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ browser })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCookieSyncStatus(`Success! Cookies synced from ${browser}.`);
+        setBrowserCookies(browser);
+      } else {
+        setCookieSyncStatus(`Error: ${data.error || 'Failed'}`);
+      }
+    } catch(e: any) {
+      setCookieSyncStatus(`Failed: ${e.message}`);
+    } finally {
+      setIsSyncingCookies(false);
+    }
+  };
 
   // Filter history items for GIF if in GIF section
   const displayedHistory = isGifSection 
@@ -1177,111 +1434,138 @@ function SettingsView({ theme, activeSection, setActiveView, playlistMode, setPl
       })
     : historyItems;
 
+  const qualityOptions: DropdownOption[] = [
+    { value: 'Best', label: 'Best Quality (4K / 1080p)', badge: 'Max' },
+    { value: '1440p', label: '1440p QHD' },
+    { value: '1080p', label: '1080p Full HD' },
+    { value: '720p', label: '720p HD' },
+    { value: '480p', label: '480p Standard' },
+  ];
+
+  const browserOptions: DropdownOption[] = [
+    { value: 'none', label: 'No Browser Cookies (Default)' },
+    { value: 'chrome', label: 'Google Chrome' },
+    { value: 'firefox', label: 'Mozilla Firefox' },
+    { value: 'brave', label: 'Brave Browser' },
+    { value: 'edge', label: 'Microsoft Edge' },
+    { value: 'opera', label: 'Opera' },
+    { value: 'vivaldi', label: 'Vivaldi' },
+  ];
+
+  const codecOptions: DropdownOption[] = [
+    { value: 'auto', label: 'Auto (Best Quality & Speed)', badge: 'Auto' },
+    { value: 'h264', label: 'H.264 / AVC (Max Device Compatibility)', badge: 'H.264' },
+    { value: 'av1', label: 'AV1 / VP9 (Maximum Compression)', badge: 'AV1' },
+  ];
+
+  const gifFpsOptions: DropdownOption[] = [
+    { value: 'original', label: 'Original FPS', badge: '100%' },
+    { value: '60', label: '60 FPS', badge: 'Smooth' },
+    { value: '50', label: '50 FPS' },
+    { value: '30', label: '30 FPS' },
+    { value: '24', label: '24 FPS' },
+    { value: '15', label: '15 FPS' },
+  ];
+
+  const gifScaleOptions: DropdownOption[] = [
+    { value: 'original', label: '100% Original', badge: '1:1' },
+    { value: '1080p', label: '1080p FHD' },
+    { value: '720p', label: '720p HD' },
+    { value: '480p', label: '480p SD' },
+    { value: '360p', label: '360p Compact' },
+  ];
+
+  const gifDitherOptions: DropdownOption[] = [
+    { value: 'bayer', label: 'Bayer Matrix Scale 5', badge: 'Best' },
+    { value: 'sierra', label: 'Sierra 2-4A (Smooth)' },
+    { value: 'floyd', label: 'Floyd-Steinberg' },
+    { value: 'none', label: 'No Dithering' },
+  ];
+
+  const maxFileSizeOptions: DropdownOption[] = [
+    { value: 'none', label: 'No Limit (Max Fidelity)' },
+    { value: '8M', label: 'Discord Free (8 MB)', badge: '8MB' },
+    { value: '15M', label: 'Twitter / X (15 MB)', badge: '15MB' },
+    { value: '25M', label: 'Discord Nitro (25 MB)', badge: '25MB' },
+    { value: '50M', label: 'Web / Telegram (50 MB)', badge: '50MB' },
+  ];
+
   return (
     <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
       
-      {/* Return Button */}
-      <button 
-        onClick={() => setActiveView(isGifSection ? 'gif_machine' : 'main')} 
-        className="absolute top-3 left-6 px-3 py-1 rounded-xl text-xs font-bold border border-white/10 hover:bg-white/10 transition-all flex items-center gap-1.5 opacity-70 hover:opacity-100 z-10"
-        style={{ color: theme.textMain }}
-      >
-        <ChevronLeft size={14} style={{ color: theme.accent }} />
-        <span>Return to {isGifSection ? 'GIF Machine' : 'Downloader'}</span>
-      </button>
-
       {/* Left Panel: Contextual Settings Controls */}
-      <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between pt-8" style={{ backgroundColor: theme.panelInner }}>
-        <div>
-          <h2 className="text-[28px] mb-4 font-bold text-center w-full" style={{ color: theme.textMain }}>
+      <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
+        <div className="overflow-y-auto custom-scrollbar pr-1">
+          <h2 className="text-[26px] mb-4 font-bold text-center w-full" style={{ color: theme.textMain }}>
             {isGifSection ? 'GIF Machine Settings' : 'Downloader Settings'}
           </h2>
           
-          <div className="w-full flex flex-col gap-4 pl-2 mt-3">
+          <div className="w-full flex flex-col gap-3.5 pl-1 mt-2">
             {isGifSection ? (
               <>
                 {/* 1. GIF Framerate */}
                 <div className="flex items-center justify-between mx-2">
-                  <span className="text-[17px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Default Framerate:</span>
-                  <div className="flex items-center pl-3 pr-2 py-1 rounded-lg text-[15px] min-w-[140px] relative" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText }}>
-                    <div className="font-bold tracking-wide w-full text-center pr-2">
-                      {gifFps === 'original' ? 'Original FPS' : `${gifFps} FPS`}
-                    </div>
-                    <div className="w-[3px] h-[18px] rounded-full shrink-0" style={{ backgroundColor: theme.btnLightBorder }}></div>
-                    <div className="relative flex items-center justify-center cursor-pointer pl-2 pr-1 w-[32px]">
-                      <ChevronDown size={20} strokeWidth={3} className="pointer-events-none" />
-                      <select 
-                        value={gifFps} 
-                        onChange={(e) => setGifFps(e.target.value)} 
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full font-bold text-[14px]"
-                      >
-                        <option value="original">Original FPS</option>
-                        <option value="60">60 FPS</option>
-                        <option value="50">50 FPS</option>
-                        <option value="30">30 FPS</option>
-                        <option value="24">24 FPS</option>
-                        <option value="15">15 FPS</option>
-                      </select>
-                    </div>
-                  </div>
+                  <span className="text-[15px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Default Framerate:</span>
+                  <CustomDropdown 
+                    value={gifFps}
+                    options={gifFpsOptions}
+                    onChange={setGifFps}
+                    theme={theme}
+                    variant="tactile-light"
+                    size="sm"
+                    accentColor={accentColor}
+                  />
                 </div>
 
                 {/* 2. GIF Resolution Scale */}
                 <div className="flex items-center justify-between mx-2">
-                  <span className="text-[17px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Default Resolution:</span>
-                  <div className="flex items-center pl-3 pr-2 py-1 rounded-lg text-[15px] min-w-[140px] relative" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText }}>
-                    <div className="font-bold tracking-wide w-full text-center pr-2">
-                      {gifScale === 'original' ? '100% Original' : gifScale}
-                    </div>
-                    <div className="w-[3px] h-[18px] rounded-full shrink-0" style={{ backgroundColor: theme.btnLightBorder }}></div>
-                    <div className="relative flex items-center justify-center cursor-pointer pl-2 pr-1 w-[32px]">
-                      <ChevronDown size={20} strokeWidth={3} className="pointer-events-none" />
-                      <select 
-                        value={gifScale} 
-                        onChange={(e) => setGifScale(e.target.value)} 
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full font-bold text-[14px]"
-                      >
-                        <option value="original">Original 100%</option>
-                        <option value="1080p">1080p FHD</option>
-                        <option value="720p">720p HD</option>
-                        <option value="480p">480p SD</option>
-                        <option value="360p">360p Compact</option>
-                      </select>
-                    </div>
-                  </div>
+                  <span className="text-[15px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Default Resolution:</span>
+                  <CustomDropdown 
+                    value={gifScale}
+                    options={gifScaleOptions}
+                    onChange={setGifScale}
+                    theme={theme}
+                    variant="tactile-light"
+                    size="sm"
+                    accentColor={accentColor}
+                  />
                 </div>
 
                 {/* 3. GIF Dithering Algorithm */}
                 <div className="flex items-center justify-between mx-2">
-                  <span className="text-[17px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Dithering Engine:</span>
-                  <div className="flex items-center pl-3 pr-2 py-1 rounded-lg text-[15px] min-w-[140px] relative" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText }}>
-                    <div className="font-bold tracking-wide w-full text-center pr-2">
-                      {gifDither === 'bayer' ? 'Bayer Matrix' : gifDither === 'sierra' ? 'Sierra 2-4A' : gifDither === 'floyd' ? 'Floyd-Stein' : 'No Dither'}
-                    </div>
-                    <div className="w-[3px] h-[18px] rounded-full shrink-0" style={{ backgroundColor: theme.btnLightBorder }}></div>
-                    <div className="relative flex items-center justify-center cursor-pointer pl-2 pr-1 w-[32px]">
-                      <ChevronDown size={20} strokeWidth={3} className="pointer-events-none" />
-                      <select 
-                        value={gifDither} 
-                        onChange={(e) => setGifDither(e.target.value)} 
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full font-bold text-[14px]"
-                      >
-                        <option value="bayer">Bayer Matrix Scale 5</option>
-                        <option value="sierra">Sierra 2-4A (Smooth)</option>
-                        <option value="floyd">Floyd-Steinberg</option>
-                        <option value="none">No Dithering</option>
-                      </select>
-                    </div>
-                  </div>
+                  <span className="text-[15px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Dithering Engine:</span>
+                  <CustomDropdown 
+                    value={gifDither}
+                    options={gifDitherOptions}
+                    onChange={setGifDither}
+                    theme={theme}
+                    variant="tactile-light"
+                    size="sm"
+                    accentColor={accentColor}
+                  />
                 </div>
 
-                {/* 4. Sound Loop Default Toggle */}
+                {/* 4. GIF Max File Size Target */}
+                <div className="flex items-center justify-between mx-2">
+                  <span className="text-[15px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Max File Size Target:</span>
+                  <CustomDropdown 
+                    value={gifMaxFileSize}
+                    options={maxFileSizeOptions}
+                    onChange={setGifMaxFileSize}
+                    theme={theme}
+                    variant="tactile-light"
+                    size="sm"
+                    accentColor={accentColor}
+                  />
+                </div>
+
+                {/* 5. Sound Loop Default Toggle */}
                 <div className="flex items-center justify-between mx-2 pt-1">
-                  <span className="text-[17px] font-medium" style={{ color: theme.textMain }}>Sound Loop MP4 Default:</span>
+                  <span className="text-[15px] font-medium" style={{ color: theme.textMain }}>Sound Loop MP4 Default:</span>
                   <button 
                     onClick={() => setGifAudioLoop(!gifAudioLoop)} 
                     className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4" 
-                    style={{ backgroundColor: gifAudioLoop ? theme.accent : '#555' }}
+                    style={{ backgroundColor: gifAudioLoop ? accentColor : '#555' }}
                   >
                     <div 
                       className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
@@ -1294,65 +1578,152 @@ function SettingsView({ theme, activeSection, setActiveView, playlistMode, setPl
                   </button>
                 </div>
 
-                {/* 5. GIF Folder Button */}
+                {/* 6. GIF Folder Button */}
                 <div className="pt-2 mx-2">
                   <button 
                     onClick={changeDownloadFolder} 
                     className="w-full py-2.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-white/10 hover:bg-white/5 transition-all"
                     style={{ color: theme.textMain }}
                   >
-                    <FolderOpen size={16} style={{ color: theme.accent }} />
+                    <FolderOpen size={16} style={{ color: accentColor }} />
                     <span>Change GIF Output Folder</span>
                   </button>
                 </div>
               </>
             ) : (
               <>
-                {/* Standard Downloader Quality */}
-                <div className="flex items-center justify-between mx-4">
-                  <span className="text-[22px] whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
-                  <div className="flex items-center pl-3 pr-2 py-1.5 rounded-lg text-[18px] min-w-[130px] relative" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText }}>
-                    <div className="font-bold tracking-wide w-full text-center pr-3">{quality}</div>
-                    <div className="w-[5px] h-[22px] rounded-full shrink-0" style={{ backgroundColor: theme.btnLightBorder }}></div>
-                    <div className="relative flex items-center justify-center cursor-pointer pl-3 pr-2 w-[40px]">
-                      <ChevronDown size={28} strokeWidth={4} className="pointer-events-none" />
-                      <select value={quality} onChange={(e) => setQuality(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full font-bold text-[18px]">
-                        <option className="font-bold text-black bg-white">Best</option>
-                        <option className="font-bold text-black bg-white">High</option>
-                        <option className="font-bold text-black bg-white">Medium</option>
-                        <option className="font-bold text-black bg-white">Low</option>
-                      </select>
-                    </div>
-                  </div>
+                {/* 1. Standard Downloader Quality Custom Dropdown */}
+                <div className="flex items-center justify-between mx-2">
+                  <span className="text-[16px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
+                  <CustomDropdown 
+                    value={quality}
+                    options={qualityOptions}
+                    onChange={setQuality}
+                    theme={theme}
+                    variant="tactile-light"
+                    size="md"
+                    accentColor={accentColor}
+                    minWidth={160}
+                  />
                 </div>
 
-                {/* Playlist Mode Toggle */}
-                <div className="flex items-center justify-between mx-4 mt-3">
-                  <span className="text-[22px]" style={{ color: theme.textMain }}>Playlist Mode</span>
+                {/* 2. SponsorBlock Integration Toggle */}
+                <div className="flex items-center justify-between mx-2 pt-1">
+                  <div className="flex flex-col">
+                    <span className="text-[15px] font-medium flex items-center gap-1.5" style={{ color: theme.textMain }}>
+                      <Shield size={16} className="text-emerald-400" />
+                      <span>SponsorBlock Auto-Skip</span>
+                    </span>
+                    <span className="text-[11px] opacity-60">Auto-remove sponsors, intros & promos</span>
+                  </div>
                   <button 
-                    onClick={() => setPlaylistMode(!playlistMode)} 
-                    className="relative flex items-center w-14 h-5 rounded-full transition-colors ml-4" 
-                    style={{ backgroundColor: playlistMode ? theme.accent : '#555' }}
+                    onClick={() => setSponsorBlock(!sponsorBlock)} 
+                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4 shrink-0" 
+                    style={{ backgroundColor: sponsorBlock ? '#10B981' : '#555' }}
                   >
                     <div 
-                      className="absolute w-8 h-8 rounded-full transition-all shadow-md" 
+                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
                       style={{ 
-                        backgroundColor: playlistMode ? theme.inputBg : '#a0a0a8', 
-                        left: playlistMode ? 'auto' : '-4px', 
-                        right: playlistMode ? '-4px' : 'auto' 
+                        backgroundColor: sponsorBlock ? theme.inputBg : '#a0a0a8', 
+                        left: sponsorBlock ? 'auto' : '-3px', 
+                        right: sponsorBlock ? '-3px' : 'auto' 
                       }} 
                     />
                   </button>
                 </div>
 
-                {/* Change Folder Button */}
-                <div className="pt-4 mx-4">
+                {/* 3. Browser Cookie Extractor Dropdown & Action */}
+                <div className="flex flex-col gap-1.5 mx-2 p-2.5 rounded-xl bg-black/30 border border-white/5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-medium flex items-center gap-1.5 text-white">
+                      <Cookie size={14} className="text-amber-400" />
+                      <span>Browser Cookie Sync:</span>
+                    </span>
+                    {cookieSyncStatus && (
+                      <span className="text-[10px] font-mono text-amber-300 truncate max-w-[140px]">{cookieSyncStatus}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <CustomDropdown 
+                      value={browserCookies}
+                      options={browserOptions}
+                      onChange={setBrowserCookies}
+                      theme={theme}
+                      variant="glass-dark"
+                      size="sm"
+                      accentColor={accentColor}
+                      className="flex-1"
+                    />
+                    <button
+                      onClick={() => handleSyncBrowserCookies(browserCookies === 'none' ? 'chrome' : browserCookies)}
+                      disabled={isSyncingCookies}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white shrink-0 border border-white/10"
+                    >
+                      {isSyncingCookies ? 'Syncing...' : 'Sync'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Video Codec Selection */}
+                <div className="flex items-center justify-between mx-2">
+                  <span className="text-[15px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Video Codec Priority:</span>
+                  <CustomDropdown 
+                    value={videoCodec}
+                    options={codecOptions}
+                    onChange={setVideoCodec}
+                    theme={theme}
+                    variant="tactile-light"
+                    size="sm"
+                    accentColor={accentColor}
+                  />
+                </div>
+
+                {/* 5. Embed Metadata & Album Art */}
+                <div className="flex items-center justify-between mx-2">
+                  <span className="text-[15px] font-medium" style={{ color: theme.textMain }}>Embed Thumbnail & Metadata:</span>
+                  <button 
+                    onClick={() => setEmbedMetadata(!embedMetadata)} 
+                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4" 
+                    style={{ backgroundColor: embedMetadata ? accentColor : '#555' }}
+                  >
+                    <div 
+                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
+                      style={{ 
+                        backgroundColor: embedMetadata ? theme.inputBg : '#a0a0a8', 
+                        left: embedMetadata ? 'auto' : '-3px', 
+                        right: embedMetadata ? '-3px' : 'auto' 
+                      }} 
+                    />
+                  </button>
+                </div>
+
+                {/* 6. Playlist Mode Toggle */}
+                <div className="flex items-center justify-between mx-2">
+                  <span className="text-[15px] font-medium" style={{ color: theme.textMain }}>Playlist Mode:</span>
+                  <button 
+                    onClick={() => setPlaylistMode(!playlistMode)} 
+                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4" 
+                    style={{ backgroundColor: playlistMode ? accentColor : '#555' }}
+                  >
+                    <div 
+                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
+                      style={{ 
+                        backgroundColor: playlistMode ? theme.inputBg : '#a0a0a8', 
+                        left: playlistMode ? 'auto' : '-3px', 
+                        right: playlistMode ? '-3px' : 'auto' 
+                      }} 
+                    />
+                  </button>
+                </div>
+
+                {/* 7. Change Folder Button */}
+                <div className="pt-2 mx-2">
                   <button 
                     onClick={changeDownloadFolder} 
-                    className="w-full py-3 px-4 rounded-xl text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-white/10 hover:bg-white/5 transition-all"
+                    className="w-full py-2.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-white/10 hover:bg-white/5 transition-all"
                     style={{ color: theme.textMain }}
                   >
-                    <FolderOpen size={18} style={{ color: theme.accent }} />
+                    <FolderOpen size={16} style={{ color: accentColor }} />
                     <span>Change Download Folder</span>
                   </button>
                 </div>
@@ -1361,24 +1732,24 @@ function SettingsView({ theme, activeSection, setActiveView, playlistMode, setPl
           </div>
         </div>
 
-        <div className="text-xs font-mono opacity-50 px-2">
+        <div className="text-xs font-mono opacity-50 px-2 mt-2">
           {isGifSection ? 'FFmpeg 2-Pass Palettegen Studio Core Active' : 'yt-dlp Core Universal Media Engine Active'}
         </div>
       </div>
 
       {/* Right Panel: Contextual History */}
-      <div className="flex-[1.4] rounded-[20px] p-6 flex flex-col pt-8" style={{ backgroundColor: theme.panelInner }}>
-        <h2 className="text-[28px] mb-4 font-bold text-center w-full" style={{ color: theme.textMain }}>
+      <div className="flex-[1.4] rounded-[20px] p-6 flex flex-col" style={{ backgroundColor: theme.panelInner }}>
+        <h2 className="text-[26px] mb-4 font-bold text-center w-full" style={{ color: theme.textMain }}>
           {isGifSection ? 'GIF Conversion History' : 'Download History'}
         </h2>
         
-        <div className="w-full flex-1 flex flex-col overflow-y-auto px-2 gap-3 custom-scrollbar">
+        <div className="w-full flex-1 flex flex-col overflow-y-auto px-2 gap-2.5 custom-scrollbar">
           {displayedHistory.length > 0 ? displayedHistory.map((h: any, i: number) => (
-            <div key={i} className="flex gap-3 items-center border-b border-white/5 pb-2.5">
+            <div key={i} className="flex gap-3 items-center border-b border-white/5 pb-2">
               <div className="text-xs font-mono tracking-tight shrink-0 opacity-60" style={{ color: theme.textMain }}>{h.date}</div>
-              <div className="text-sm leading-snug break-words flex-1 font-medium" style={{ color: theme.textMain }}>{h.filename}</div>
+              <div className="text-xs leading-snug break-words flex-1 font-medium" style={{ color: theme.textMain }}>{h.filename}</div>
               {h.type && (
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/10" style={{ color: theme.accent }}>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/10" style={{ color: accentColor }}>
                   {h.type}
                 </span>
               )}
@@ -1395,13 +1766,16 @@ function SettingsView({ theme, activeSection, setActiveView, playlistMode, setPl
 }
 
 // -------------------------------------------------------------
-// CONTEXTUAL LOG VIEW: Dedicated GIF Logs vs Application Logs
+// AUTHENTIC OG LOG VIEW: Clean Monospace Terminal with Chips
 // -------------------------------------------------------------
 function LogView({ theme, activeSection, setActiveView }: { theme: any, activeSection: 'downloader' | 'gif', setActiveView: (v: any) => void }) {
   const isGifSection = activeSection === 'gif';
+  const accentColor = isGifSection ? theme.gifAccent : theme.accent;
+  
   const [search, setSearch] = useState('');
-  const [filterMode, setFilterMode] = useState<'all' | 'ffmpeg' | 'errors'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'engine' | 'errors'>('all');
   const [logs, setLogs] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
   
   useEffect(() => {
     const fetchLogs = () => { 
@@ -1414,32 +1788,30 @@ function LogView({ theme, activeSection, setActiveView }: { theme: any, activeSe
     return () => clearInterval(interval);
   }, []);
 
+  const handleCopyLogs = () => {
+    if (logs.length > 0) {
+      navigator.clipboard.writeText(logs.join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const filtered = logs.filter(l => {
     const matchSearch = l.toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
-    if (filterMode === 'errors') return l.toLowerCase().includes('error');
-    if (filterMode === 'ffmpeg') return l.toLowerCase().includes('ffmpeg') || l.toLowerCase().includes('palette') || l.toLowerCase().includes('render') || l.toLowerCase().includes('frame');
+    if (filterMode === 'errors') return l.toLowerCase().includes('error') || l.toLowerCase().includes('fail');
+    if (filterMode === 'engine') return l.toLowerCase().includes('ffmpeg') || l.toLowerCase().includes('download') || l.toLowerCase().includes('merger') || l.toLowerCase().includes('extract');
     return true;
   });
 
   return (
     <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex flex-col relative" style={{ backgroundColor: theme.panelOuter }}>
       
-      {/* Return Button */}
-      <button 
-        onClick={() => setActiveView(isGifSection ? 'gif_machine' : 'main')} 
-        className="absolute top-3 left-6 px-3 py-1 rounded-xl text-xs font-bold border border-white/10 hover:bg-white/10 transition-all flex items-center gap-1.5 opacity-70 hover:opacity-100 z-10"
-        style={{ color: theme.textMain }}
-      >
-        <ChevronLeft size={14} style={{ color: theme.accent }} />
-        <span>Return to {isGifSection ? 'GIF Machine' : 'Downloader'}</span>
-      </button>
-
-      <div className="flex-1 rounded-[20px] p-6 flex flex-col font-mono text-xs overflow-hidden pt-8" style={{ backgroundColor: theme.panelInner, color: theme.textSecondary }}>
+      <div className="flex-1 rounded-[20px] p-6 flex flex-col font-mono text-xs overflow-hidden" style={{ backgroundColor: theme.panelInner, color: theme.textSecondary }}>
         <div className="flex justify-between items-center mb-4 shrink-0 px-2">
           <div>
             <h2 className="text-[24px] font-sans font-bold" style={{ color: theme.textMain }}>
-              {isGifSection ? 'GIF Machine & FFmpeg Logs' : 'Application Logs'}
+              {isGifSection ? 'GIF Machine & FFmpeg Logs' : 'Universal Downloader Logs'}
             </h2>
             <div className="text-[11px] opacity-60 font-sans mt-0.5">
               {isGifSection ? 'Real-time 2-pass palettegen, frame rendering, and conversion stream' : 'Universal downloader process output and system diagnostics'}
@@ -1456,10 +1828,10 @@ function LogView({ theme, activeSection, setActiveView }: { theme: any, activeSe
                 All Logs
               </button>
               <button 
-                onClick={() => setFilterMode('ffmpeg')} 
-                className={`px-2.5 py-1 rounded-md transition-all ${filterMode === 'ffmpeg' ? 'bg-white/15 text-white font-bold' : 'opacity-60'}`}
+                onClick={() => setFilterMode('engine')} 
+                className={`px-2.5 py-1 rounded-md transition-all ${filterMode === 'engine' ? 'bg-white/15 text-white font-bold' : 'opacity-60'}`}
               >
-                {isGifSection ? 'FFmpeg Engine' : 'Engine'}
+                Engine Stream
               </button>
               <button 
                 onClick={() => setFilterMode('errors')} 
@@ -1474,8 +1846,16 @@ function LogView({ theme, activeSection, setActiveView }: { theme: any, activeSe
               placeholder="Search logs..." 
               value={search} 
               onChange={e => setSearch(e.target.value)} 
-              className="px-3 py-1.5 rounded-lg outline-none font-sans text-xs bg-black/40 border border-white/10 text-white w-40" 
+              className="px-3 py-1.5 rounded-lg outline-none font-sans text-xs bg-black/40 border border-white/10 text-white w-36" 
             />
+
+            <button 
+              onClick={handleCopyLogs}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-all"
+              title="Copy all logs"
+            >
+              {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+            </button>
           </div>
         </div>
 
@@ -1483,16 +1863,16 @@ function LogView({ theme, activeSection, setActiveView }: { theme: any, activeSe
 
         <div className="flex-1 overflow-y-auto flex flex-col gap-1.5 pl-2 pr-2 custom-scrollbar select-text">
           {filtered.length > 0 ? filtered.map((log, i) => {
-            const isError = log.toLowerCase().includes('error');
+            const isError = log.toLowerCase().includes('error') || log.toLowerCase().includes('fail');
             const isSuccess = log.includes('Successfully') || log.includes('Saved:');
-            const isFfmpeg = log.includes('FFmpeg') || log.includes('Rendering') || log.includes('frame=');
+            const isEngine = log.includes('FFmpeg') || log.includes('Rendering') || log.includes('[download]') || log.includes('[Merger]');
             return (
               <div 
                 key={i} 
                 className={`py-0.5 leading-relaxed font-mono ${
-                  isError ? 'font-bold' : isSuccess ? 'text-emerald-400 font-semibold' : isFfmpeg ? 'text-blue-300 opacity-90' : 'opacity-75'
+                  isError ? 'font-bold' : isSuccess ? 'text-emerald-400 font-semibold' : isEngine ? 'text-blue-300 opacity-90' : 'opacity-75'
                 }`} 
-                style={isError ? { color: theme.accent } : {}}
+                style={isError ? { color: accentColor } : {}}
               >
                 <span className="opacity-30 mr-2">{">"}</span>
                 {log}

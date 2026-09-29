@@ -485,6 +485,25 @@ def api_update():
     threading.Thread(target=run_update).start()
     return jsonify({"success": True})
 
+@app.route('/api/sync_cookies', methods=['POST'])
+def api_sync_cookies():
+    data = request.json or {}
+    browser = data.get('browser', 'chrome').lower()
+    try:
+        app_logs.append(f"Extracting session cookies from {browser.capitalize()}...")
+        if not os.path.exists(TOOLS_DIR):
+            os.makedirs(TOOLS_DIR)
+        cmd = [YTDLP_EXE, "--cookies-from-browser", browser, "--cookies", COOKIES_STORED, "--skip-download", "https://www.youtube.com"]
+        run_process(cmd)
+        if os.path.exists(COOKIES_STORED):
+            app_logs.append(f"Successfully synchronized cookies from {browser.capitalize()}!")
+            return jsonify({"success": True, "message": f"Cookies synchronized from {browser.capitalize()}!"})
+        else:
+            return jsonify({"success": False, "error": "Could not extract cookies."})
+    except Exception as e:
+        app_logs.append(f"Cookie sync error: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route('/api/download', methods=['POST'])
 def api_download():
     data = request.json or {}
@@ -498,12 +517,23 @@ def api_download():
     fps = data.get('fps', 'original')
     scale = data.get('scale', 'original')
     dither = data.get('dither', 'bayer')
+    boomerang = data.get('boomerang', False)
+    crop = data.get('crop', 'none')
+    speed = data.get('speed', '1.0')
+    meme_top = data.get('memeTop', '')
+    meme_bottom = data.get('memeBottom', '')
+    max_file_size = data.get('maxFileSize', 'none')
+    sponsor_block = data.get('sponsorBlock', False)
+    browser_cookies = data.get('browserCookies', 'none')
+    embed_metadata = data.get('embedMetadata', True)
+    video_codec = data.get('videoCodec', 'auto')
     
     if not url:
         return jsonify({"success": False, "error": "No URL provided"})
     
     threading.Thread(target=run_download, args=(
-        url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps, scale, dither
+        url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps, scale, dither,
+        boomerang, crop, speed, meme_top, meme_bottom, max_file_size, sponsor_block, browser_cookies, embed_metadata, video_codec
     )).start()
     return jsonify({"success": True})
 
@@ -518,12 +548,19 @@ def api_convert_local():
     fps = data.get('fps', 'original')
     scale = data.get('scale', 'original')
     dither = data.get('dither', 'bayer')
+    boomerang = data.get('boomerang', False)
+    crop = data.get('crop', 'none')
+    speed = data.get('speed', '1.0')
+    meme_top = data.get('memeTop', '')
+    meme_bottom = data.get('memeBottom', '')
+    max_file_size = data.get('maxFileSize', 'none')
     
     if not input_file or not os.path.exists(input_file):
         return jsonify({"success": False, "error": "Input file does not exist"})
     
     threading.Thread(target=run_local_convert, args=(
-        input_file, target_format, custom_name, start_time, end_time, fps, scale, dither
+        input_file, target_format, custom_name, start_time, end_time, fps, scale, dither,
+        boomerang, crop, speed, meme_top, meme_bottom, max_file_size
     )).start()
     return jsonify({"success": True})
 
@@ -564,14 +601,30 @@ def run_process(cmd_list):
         current_process = None
 
 # --- HIGH-QUALITY VIDEO TO GIF / CONVERSION ENGINE ---
-def build_gif_filter_graph(fps_val, scale_val, dither_val):
+def build_gif_filter_graph(fps_val, scale_val, dither_val, boomerang=False, crop_val='none', speed_val='1.0', meme_top='', meme_bottom=''):
     filters = []
     
-    # 1. FPS filter if specific fps requested
+    # 1. Playback Speed Multiplier
+    try:
+        sp = float(speed_val)
+        if sp > 0 and sp != 1.0:
+            filters.append(f"setpts={1.0/sp:.4f}*PTS")
+    except:
+        pass
+
+    # 2. Aspect Ratio / Crop Filter
+    if crop_val == '1:1':
+        filters.append("crop=min(iw\\,ih):min(iw\\,ih)")
+    elif crop_val == '9:16':
+        filters.append("crop=ih*9/16:ih")
+    elif crop_val == '4:3':
+        filters.append("crop=ih*4/3:ih")
+
+    # 3. FPS filter if specific fps requested
     if fps_val and fps_val != "original":
         filters.append(f"fps={fps_val}")
         
-    # 2. Lanczos high-quality scale if requested
+    # 4. Lanczos high-quality scale if requested
     if scale_val and scale_val != "original":
         if scale_val == "1080p":
             filters.append("scale=-1:1080:flags=lanczos")
@@ -582,22 +635,37 @@ def build_gif_filter_graph(fps_val, scale_val, dither_val):
         elif scale_val == "360p":
             filters.append("scale=-1:360:flags=lanczos")
             
+    # 5. Meme text overlays
+    if meme_top:
+        safe_top = meme_top.replace("'", "").replace(":", "").replace("[", "").replace("]", "")
+        filters.append(f"drawtext=text='{safe_top}':fontcolor=white:fontsize=28:borderw=3:bordercolor=black:x=(w-text_w)/2:y=15")
+    if meme_bottom:
+        safe_bot = meme_bottom.replace("'", "").replace(":", "").replace("[", "").replace("]", "")
+        filters.append(f"drawtext=text='{safe_bot}':fontcolor=white:fontsize=28:borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-text_h-15")
+
     prefix = ",".join(filters)
     if prefix:
         prefix += ","
         
-    # 3. Two-pass Palettegen + Paletteuse filter for master quality (no color banding, preserved full colors)
-    dither_opt = "bayer:bayer_scale=5" if dither_val == "bayer" else "sierra2_4a" if dither_val == "sierra" else "floyd_steinberg"
-    graph = f"{prefix}split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff:reserve_transparent=on[p];[s1][p]paletteuse=dither={dither_opt}:diff_mode=rectangle"
+    # 6. Two-pass Palettegen + Paletteuse filter for master quality
+    dither_opt = "bayer:bayer_scale=5" if dither_val == "bayer" else "sierra2_4a" if dither_val == "sierra" else "floyd_steinberg" if dither_val == "floyd" else "none"
+    
+    if boomerang:
+        # Boomerang: split, reverse, concat forward + reverse, then generate optimal palette
+        graph = f"{prefix}split[v0][v1];[v1]reverse[vr];[v0][vr]concat=n=2:v=1:a=0[vcat];[vcat]split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff:reserve_transparent=on[p];[s1][p]paletteuse=dither={dither_opt}:diff_mode=rectangle"
+    else:
+        graph = f"{prefix}split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff:reserve_transparent=on[p];[s1][p]paletteuse=dither={dither_opt}:diff_mode=rectangle"
     return graph
 
-def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps, scale, dither):
+def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps="original", scale="original", dither="bayer",
+                 boomerang=False, crop="none", speed="1.0", meme_top="", meme_bottom="", max_file_size="none",
+                 sponsor_block=False, browser_cookies="none", embed_metadata=True, video_codec="auto"):
     global app_logs
     app_logs.clear()
     check_cookies()
     app_logs.append(f"Universal Media Engine: Preparing download for {url}")
     
-    time.sleep(1.0)
+    time.sleep(0.5)
     
     timestamp = int(time.time())
     base_name = custom_name if custom_name else "%(title)s"
@@ -608,8 +676,13 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         
         # 1. Download video stream with yt-dlp
         cmd = [YTDLP_EXE]
-        if os.path.exists(COOKIES_STORED):
+        if browser_cookies and browser_cookies != 'none':
+            cmd.extend(["--cookies-from-browser", browser_cookies])
+        elif os.path.exists(COOKIES_STORED):
             cmd.extend(["--cookies", COOKIES_STORED])
+            
+        if sponsor_block:
+            cmd.extend(["--sponsorblock-remove", "sponsor,intro,outro,selfpromo"])
             
         cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
         if start_time and end_time:
@@ -638,8 +711,8 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         final_output = os.path.join(download_dir, final_filename)
         
         if fmt == 'gif':
-            app_logs.append("Rendering Master-Quality GIF (Original Framerate & 2-Pass Palette Filter)...")
-            filter_graph = build_gif_filter_graph(fps, scale, dither)
+            app_logs.append("Rendering Master-Quality GIF (2-Pass Palette Filter & Custom Graph)...")
+            filter_graph = build_gif_filter_graph(fps, scale, dither, boomerang, crop, speed, meme_top, meme_bottom)
             conv_cmd = [FFMPEG_EXE, "-y"]
             if start_time and not ("--download-sections" in cmd):
                 conv_cmd.extend(["-ss", start_time])
@@ -648,7 +721,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             conv_cmd.extend(["-i", temp_video, "-vf", filter_graph, final_output])
             run_process(conv_cmd)
         elif fmt == 'loop_mp4':
-            app_logs.append("Rendering Looping Video Clip with Audio (Original Sound & 60fps+ Fidelity)...")
+            app_logs.append("Rendering Looping Video Clip with Audio...")
             conv_cmd = [FFMPEG_EXE, "-y"]
             if start_time and not ("--download-sections" in cmd):
                 conv_cmd.extend(["-ss", start_time])
@@ -662,8 +735,12 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             ])
             run_process(conv_cmd)
         elif fmt == 'webp':
-            app_logs.append("Rendering Animated 24-Bit WebP (Lossless / High-Fidelity)...")
+            app_logs.append("Rendering Animated 24-Bit WebP...")
             vf = []
+            if crop and crop != "none":
+                if crop == '1:1': vf.append("crop=min(iw\\,ih):min(iw\\,ih)")
+                elif crop == '9:16': vf.append("crop=ih*9/16:ih")
+                elif crop == '4:3': vf.append("crop=ih*4/3:ih")
             if fps and fps != "original": vf.append(f"fps={fps}")
             if scale and scale != "original":
                 if scale == "1080p": vf.append("scale=-1:1080:flags=lanczos")
@@ -690,15 +767,32 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         output_path = os.path.join(download_dir, filename_template)
         
         cmd = [YTDLP_EXE]
-        if os.path.exists(COOKIES_STORED):
+        if browser_cookies and browser_cookies != 'none':
+            cmd.extend(["--cookies-from-browser", browser_cookies])
+        elif os.path.exists(COOKIES_STORED):
             cmd.extend(["--cookies", COOKIES_STORED])
+            
+        if sponsor_block:
+            cmd.extend(["--sponsorblock-remove", "sponsor,intro,outro,selfpromo"])
+            
+        if max_file_size and max_file_size != 'none':
+            cmd.extend(["--max-filesize", max_file_size])
+            
+        if video_codec == 'h264':
+            cmd.extend(["-S", "vcodec:h264,res,acodec:m4a"])
+        elif video_codec == 'av1':
+            cmd.extend(["-S", "vcodec:av01,res"])
         
         if fmt == 'wav':
             cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "wav", "--audio-quality", "0"])
         elif fmt == 'flac':
-            cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "flac", "--audio-quality", "0", "--embed-thumbnail", "--add-metadata"])
+            cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "flac", "--audio-quality", "0"])
+            if embed_metadata:
+                cmd.extend(["--embed-thumbnail", "--add-metadata"])
         elif fmt == 'mp3':
-            cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "mp3", "--audio-quality", "0", "--embed-thumbnail", "--add-metadata"])
+            cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "mp3", "--audio-quality", "0"])
+            if embed_metadata:
+                cmd.extend(["--embed-thumbnail", "--add-metadata"])
         elif fmt == 'webm':
             cmd.extend(["-f", "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]/best", "--merge-output-format", "webm"])
         else: # Default MP4
@@ -712,7 +806,9 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                 cmd.extend(["-f", "bestvideo[height<=720]+bestaudio/best[height<=720]/best"])
             elif quality == "480p":
                 cmd.extend(["-f", "bestvideo[height<=480]+bestaudio/best[height<=480]/best"])
-            cmd.extend(["--merge-output-format", "mp4", "--embed-thumbnail", "--add-metadata"])
+            cmd.extend(["--merge-output-format", "mp4"])
+            if embed_metadata:
+                cmd.extend(["--embed-thumbnail", "--add-metadata"])
         
         if start_time and end_time:
             cmd.extend(["--download-sections", f"*{start_time}-{end_time}"])
@@ -748,7 +844,8 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
 
     app_logs.append("Process Finished Successfully!")
 
-def run_local_convert(input_file, target_format, custom_name, start_time, end_time, fps, scale, dither):
+def run_local_convert(input_file, target_format, custom_name, start_time, end_time, fps="original", scale="original", dither="bayer",
+                      boomerang=False, crop="none", speed="1.0", meme_top="", meme_bottom="", max_file_size="none"):
     global app_logs
     app_logs.clear()
     app_logs.append(f"Local Studio: Converting '{os.path.basename(input_file)}' to {target_format.upper()}...")
@@ -768,7 +865,7 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
     cmd.extend(["-i", input_file])
     
     if target_format == 'gif':
-        graph = build_gif_filter_graph(fps, scale, dither)
+        graph = build_gif_filter_graph(fps, scale, dither, boomerang, crop, speed, meme_top, meme_bottom)
         cmd.extend(["-vf", graph, output_path])
     elif target_format == 'loop_mp4':
         cmd.extend([
@@ -777,6 +874,10 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
         ])
     elif target_format == 'webp':
         vf = []
+        if crop and crop != "none":
+            if crop == '1:1': vf.append("crop=min(iw\\,ih):min(iw\\,ih)")
+            elif crop == '9:16': vf.append("crop=ih*9/16:ih")
+            elif crop == '4:3': vf.append("crop=ih*4/3:ih")
         if fps and fps != "original": vf.append(f"fps={fps}")
         if scale and scale != "original":
             if scale == "1080p": vf.append("scale=-1:1080:flags=lanczos")
