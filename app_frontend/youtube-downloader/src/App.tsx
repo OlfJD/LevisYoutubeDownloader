@@ -627,6 +627,12 @@ function SettingsView({ theme, playlistMode, setPlaylistMode, quality, setQualit
             </div>
           </div>
         </div>
+        <div className="mt-auto pt-4 flex items-center justify-between text-xs font-mono opacity-50 px-4">
+          <span>yt-dlp Core Engine Active</span>
+          <span className="font-bold tracking-wider opacity-80 px-2 py-0.5 rounded bg-white/5 border border-white/10" style={{ color: theme.accent }}>
+            v1.0.5
+          </span>
+        </div>
       </div>
       <div className="flex-[1.4] rounded-[20px] p-6 flex flex-col" style={{ backgroundColor: theme.panelInner }}>
         <h2 className="text-[30px] mb-6 font-medium text-center w-full" style={{ color: theme.textMain }}>Download History</h2>
