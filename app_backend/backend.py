@@ -22,6 +22,9 @@ DIST_DIR = os.path.join(UI_DIR, "dist")
 APPDATA_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "LeviDownloader")
 TOOLS_DIR = os.path.join(APPDATA_DIR, "tools")
 YTDLP_EXE = os.path.join(TOOLS_DIR, "yt-dlp.exe")
+FFMPEG_EXE = os.path.join(TOOLS_DIR, "ffmpeg.exe")
+FFPROBE_EXE = os.path.join(TOOLS_DIR, "ffprobe.exe")
+ARIA2C_EXE = os.path.join(TOOLS_DIR, "aria2c.exe")
 COOKIES_STORED = os.path.join(TOOLS_DIR, "cookies.txt")
 SETTINGS_FILE = os.path.join(TOOLS_DIR, "settings.json")
 HISTORY_FILE = os.path.join(TOOLS_DIR, "history.json")
@@ -157,7 +160,7 @@ def initialize_assets():
     if not os.path.exists(TOOLS_DIR):
         os.makedirs(TOOLS_DIR)
     
-    executables = ["yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe"]
+    executables = ["yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe", "aria2c.exe"]
     
     for exe_name in executables:
         target_exe = os.path.join(TOOLS_DIR, exe_name)
@@ -365,6 +368,7 @@ def run_process(cmd_list):
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
+    ret_code = 1
     try:
         current_process = subprocess.Popen(
             cmd_list,
@@ -383,10 +387,12 @@ def run_process(cmd_list):
                 app_logs.pop(0)
 
         current_process.wait()
+        ret_code = current_process.returncode
     except Exception as e:
         app_logs.append(f"CRITICAL ERROR: {str(e)}")
     finally:
         current_process = None
+    return ret_code
 
 def run_download(url, fmt, quality, custom_name, playlist_mode):
     global app_logs
@@ -401,6 +407,14 @@ def run_download(url, fmt, quality, custom_name, playlist_mode):
     output_path = os.path.join(download_dir, filename_template)
     
     cmd = [YTDLP_EXE]
+    
+    # Turbo Acceleration with aria2c
+    used_aria = False
+    if os.path.exists(ARIA2C_EXE):
+        cmd.extend(["--downloader", ARIA2C_EXE, "--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16"])
+        used_aria = True
+        app_logs.append("⚡ Turbo Acceleration Active: 16x Multi-Thread Engine enabled.")
+        
     if os.path.exists(COOKIES_STORED):
         cmd.extend(["--cookies", COOKIES_STORED])
     
@@ -428,7 +442,13 @@ def run_download(url, fmt, quality, custom_name, playlist_mode):
     cmd.append(url)
     
     app_logs.append(f"Engine command built. Starting engine...")
-    run_process(cmd)
+    ret = run_process(cmd)
+    
+    # Automatic Fallback if aria2c was throttled by host
+    if ret != 0 and used_aria:
+        app_logs.append("Turbo engine encountered host limit. Automatically retrying with native downloader...")
+        cmd_fallback = [c for c in cmd if c not in ("--downloader", ARIA2C_EXE, "--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16")]
+        run_process(cmd_fallback)
     
     # Advanced History Filter: Ignore intermediate formats (.webm, .m4a, and .fXXX temporary formats)
     new_history = []
