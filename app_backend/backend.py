@@ -7,6 +7,7 @@ import subprocess
 import time
 import re
 import urllib.request
+import urllib.parse
 import zipfile
 import io
 from datetime import datetime
@@ -26,6 +27,7 @@ TOOLS_DIR = os.path.join(APPDATA_DIR, "tools")
 YTDLP_EXE = os.path.join(TOOLS_DIR, "yt-dlp.exe")
 FFMPEG_EXE = os.path.join(TOOLS_DIR, "ffmpeg.exe")
 FFPROBE_EXE = os.path.join(TOOLS_DIR, "ffprobe.exe")
+ARIA2C_EXE = os.path.join(TOOLS_DIR, "aria2c.exe")
 COOKIES_STORED = os.path.join(TOOLS_DIR, "cookies.txt")
 SETTINGS_FILE = os.path.join(TOOLS_DIR, "settings.json")
 HISTORY_FILE = os.path.join(TOOLS_DIR, "history.json")
@@ -55,6 +57,25 @@ app_logs = []
 download_dir = USER_DOWNLOADS
 window = None
 current_process = None
+
+# Live Stream DVR State
+live_recording_state = {
+    "is_recording": False,
+    "url": "",
+    "title": "",
+    "filename": "",
+    "output_path": "",
+    "start_time": 0,
+    "duration_sec": 0,
+    "bytes_downloaded": 0,
+    "quality": "Best",
+    "live_from_start": True
+}
+live_process = None
+
+# Batch Queue State
+download_queue = []
+queue_worker_active = False
 
 def get_installed_ytdlp_version():
     try:
@@ -160,7 +181,7 @@ def initialize_assets():
     if not os.path.exists(TOOLS_DIR):
         os.makedirs(TOOLS_DIR)
     
-    executables = ["yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe"]
+    executables = ["yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe", "aria2c.exe"]
     
     # 1. Check if embedded/local tools exist and copy
     for exe_name in executables:
@@ -261,6 +282,18 @@ def add_history_entry(filename, format_type="MP4"):
     except Exception as e:
         app_logs.append(f"Add history error: {e}")
 
+# --- LAN IP HELPER ---
+def get_local_ip():
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return '127.0.0.1'
+
 # --- FLASK SERVER SETUP ---
 app = Flask(__name__, static_folder=DIST_DIR)
 
@@ -269,6 +302,7 @@ def add_header(response):
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
+    response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
 @app.route('/', defaults={'path': ''})
@@ -292,7 +326,12 @@ def handle_settings():
                 data["downloadDir"] = download_dir
                 return jsonify(data)
         except:
-            return jsonify({"downloadDir": download_dir})
+            return jsonify({
+                "downloadDir": download_dir,
+                "turboMode": True,
+                "splitChapters": False,
+                "clipboardMonitor": True
+            })
     else:
         new_data = request.json or {}
         try:
@@ -322,7 +361,6 @@ def api_change_folder():
         result = window.create_file_dialog(webview.FOLDER_DIALOG)
         if result and len(result) > 0:
             download_dir = result[0]
-            # Save to settings
             try:
                 with open(SETTINGS_FILE, 'r') as f:
                     data = json.load(f)
@@ -355,7 +393,6 @@ def api_select_local_file():
         result = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
         if result and len(result) > 0:
             selected_path = result[0]
-            # Probe file info
             info = probe_media_file(selected_path)
             return jsonify({"success": True, "filePath": selected_path, "fileName": os.path.basename(selected_path), "info": info})
     return jsonify({"success": False})
@@ -370,7 +407,6 @@ def api_probe_media():
     return jsonify({"success": True, "info": info})
 
 def probe_media_file(target):
-    # Returns duration, fps, resolution, format
     startupinfo = None
     if os.name == 'nt':
         startupinfo = subprocess.STARTUPINFO()
@@ -448,54 +484,33 @@ def api_check_updates():
 
 @app.route('/api/update', methods=['POST'])
 def api_update():
-    def run_update():
-        global app_logs
-        app_logs.clear()
-        app_logs.append("=== PART 1: Updating Core Engine (yt-dlp) ===")
-        app_logs.append("Fetching latest release from yt-dlp GitHub...")
-        run_process([YTDLP_EXE, "-U"])
-        app_logs.append(" ")
-        app_logs.append("=== PART 2: Checking Levi's Downloader Updates ===")
-        app_logs.append(f"Current UI version: {CURRENT_VERSION}")
-        
-        try:
-            req = urllib.request.Request(
-                "https://api.github.com/repos/OlfJD/LevisYoutubeDownloader/releases/latest",
-                headers={'User-Agent': 'Mozilla/5.0'}
-            )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                if response.status == 200:
-                    data = json.loads(response.read().decode())
-                    latest_tag = data.get("tag_name", CURRENT_VERSION)
-                    app_logs.append(f"Latest release found on GitHub: {latest_tag}")
-                    if latest_tag != CURRENT_VERSION and is_newer_version(latest_tag, CURRENT_VERSION):
-                        app_logs.append("New update available!")
-                        app_logs.append(f"Get the update at: {data.get('html_url')}")
-                    else:
-                        app_logs.append("UI is completely up to date!")
-                else:
-                    app_logs.append("Failed to fetch GitHub version data.")
-        except Exception as e:
-            app_logs.append(f"GitHub Update check skipped/failed: {e}")
-            
-        check_all_updates_worker()
-        app_logs.append(" ")
-        app_logs.append("Process Finished Successfully!")
+    global app_logs
+    app_logs.clear()
     
-    threading.Thread(target=run_update).start()
+    def run_update_thread():
+        app_logs.append("Starting engine updater pipeline...")
+        cmd = [YTDLP_EXE, "-U"]
+        run_process(cmd)
+        
+        # Re-check update status to refresh info immediately
+        check_all_updates_worker()
+        app_logs.append("Update cycle finished.")
+        app_logs.append("Process Finished Successfully!")
+
+    threading.Thread(target=run_update_thread).start()
     return jsonify({"success": True})
 
 @app.route('/api/sync_cookies', methods=['POST'])
 def api_sync_cookies():
     data = request.json or {}
     browser = data.get('browser', 'chrome').lower()
+    
     try:
-        app_logs.append(f"Extracting session cookies from {browser.capitalize()}...")
-        if not os.path.exists(TOOLS_DIR):
-            os.makedirs(TOOLS_DIR)
-        cmd = [YTDLP_EXE, "--cookies-from-browser", browser, "--cookies", COOKIES_STORED, "--skip-download", "https://www.youtube.com"]
+        cmd = [YTDLP_EXE, "--cookies-from-browser", browser, "--cookies", COOKIES_STORED, "https://www.youtube.com", "--no-download", "--playlist-items", "0"]
+        app_logs.append(f"Synchronizing session cookies from {browser.capitalize()}...")
         run_process(cmd)
-        if os.path.exists(COOKIES_STORED):
+        
+        if os.path.exists(COOKIES_STORED) and os.path.getsize(COOKIES_STORED) > 0:
             app_logs.append(f"Successfully synchronized cookies from {browser.capitalize()}!")
             return jsonify({"success": True, "message": f"Cookies synchronized from {browser.capitalize()}!"})
         else:
@@ -503,6 +518,225 @@ def api_sync_cookies():
     except Exception as e:
         app_logs.append(f"Cookie sync error: {e}")
         return jsonify({"success": False, "error": str(e)})
+
+# --- LOCAL WI-FI SHARE & SERVING ENDPOINTS ---
+@app.route('/api/share_info', methods=['GET'])
+def api_share_info():
+    filename = request.args.get('filename', '').strip()
+    local_ip = get_local_ip()
+    port = 54321
+    encoded_name = urllib.parse.quote(filename)
+    share_url = f"http://{local_ip}:{port}/api/download_file/{encoded_name}"
+    return jsonify({
+        "ip": local_ip,
+        "port": port,
+        "shareUrl": share_url,
+        "filename": filename
+    })
+
+@app.route('/api/download_file/<path:filename>', methods=['GET'])
+def api_download_file(filename):
+    unquoted = urllib.parse.unquote(filename)
+    file_path = os.path.join(download_dir, unquoted)
+    if os.path.exists(file_path):
+        return send_from_directory(download_dir, unquoted, as_attachment=True)
+    # Check recursive folders
+    for root, dirs, files in os.walk(download_dir):
+        if unquoted in files:
+            return send_from_directory(root, unquoted, as_attachment=True)
+    return "File not found", 404
+
+# --- LIVE STREAM DVR RECORDER ENDPOINTS ---
+@app.route('/api/record_live', methods=['POST'])
+def api_record_live():
+    global live_recording_state, live_process
+    data = request.json or {}
+    url = data.get('url', '').strip()
+    quality = data.get('quality', 'Best')
+    live_from_start = data.get('liveFromStart', True)
+    custom_name = data.get('customName', '').strip()
+    browser_cookies = data.get('browserCookies', 'none')
+
+    if not url:
+        return jsonify({"success": False, "error": "No Live URL provided"})
+    
+    if live_recording_state["is_recording"]:
+        return jsonify({"success": False, "error": "A live recording is already in progress"})
+
+    timestamp = int(time.time())
+    base_name = custom_name if custom_name else f"Levi_Live_{timestamp}"
+    output_filename = f"{base_name}.mp4"
+    output_path = os.path.join(download_dir, output_filename)
+
+    live_recording_state = {
+        "is_recording": True,
+        "url": url,
+        "title": base_name,
+        "filename": output_filename,
+        "output_path": output_path,
+        "start_time": time.time(),
+        "duration_sec": 0,
+        "bytes_downloaded": 0,
+        "quality": quality,
+        "live_from_start": live_from_start
+    }
+
+    threading.Thread(target=run_live_recorder, args=(url, output_path, quality, live_from_start, browser_cookies)).start()
+    return jsonify({"success": True, "state": live_recording_state})
+
+def run_live_recorder(url, output_path, quality, live_from_start, browser_cookies):
+    global live_recording_state, live_process, app_logs
+    cmd = [YTDLP_EXE]
+    if browser_cookies and browser_cookies != 'none':
+        cmd.extend(["--cookies-from-browser", browser_cookies])
+    elif os.path.exists(COOKIES_STORED):
+        cmd.extend(["--cookies", COOKIES_STORED])
+
+    if live_from_start:
+        cmd.append("--live-from-start")
+
+    cmd.extend([
+        "--no-part",
+        "--hls-use-mpegts",
+        "-f", "bestvideo+bestaudio/best",
+        "--merge-output-format", "mp4",
+        "-o", output_path,
+        url
+    ])
+
+    app_logs.append(f"🔴 Live Stream DVR: Connecting to stream {url}...")
+    
+    my_env = os.environ.copy()
+    my_env["PATH"] += os.pathsep + TOOLS_DIR
+    startupinfo = None
+    if os.name == 'nt':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+    try:
+        live_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.PIPE,
+            startupinfo=startupinfo,
+            env=my_env,
+            universal_newlines=True,
+            encoding='utf-8',
+            errors='ignore'
+        )
+
+        for line in live_process.stdout:
+            clean_line = line.strip()
+            if clean_line:
+                app_logs.append(clean_line)
+                if len(app_logs) > 300:
+                    app_logs.pop(0)
+
+        live_process.wait()
+    except Exception as e:
+        app_logs.append(f"Live DVR Error: {e}")
+    finally:
+        live_process = None
+        live_recording_state["is_recording"] = False
+        if os.path.exists(output_path):
+            add_history_entry(os.path.basename(output_path), "LIVE DVR")
+            app_logs.append(f"🔴 Live Stream finalized and saved: {os.path.basename(output_path)}")
+
+@app.route('/api/stop_live', methods=['POST'])
+def api_stop_live():
+    global live_process, live_recording_state
+    if live_process:
+        try:
+            if live_process.stdin:
+                try:
+                    live_process.stdin.write("q\n")
+                    live_process.stdin.flush()
+                except:
+                    pass
+            time.sleep(1)
+            live_process.terminate()
+        except:
+            pass
+        live_recording_state["is_recording"] = False
+        app_logs.append("🔴 Live Stream recording stopped by user. Finalizing video container...")
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "No active recording"})
+
+@app.route('/api/live_status', methods=['GET'])
+def api_live_status():
+    global live_recording_state
+    if live_recording_state["is_recording"]:
+        live_recording_state["duration_sec"] = int(time.time() - live_recording_state["start_time"])
+        out_path = live_recording_state.get("output_path", "")
+        if out_path and os.path.exists(out_path):
+            try:
+                live_recording_state["bytes_downloaded"] = os.path.getsize(out_path)
+            except:
+                pass
+    return jsonify(live_recording_state)
+
+# --- BATCH QUEUE ENDPOINTS ---
+@app.route('/api/queue', methods=['GET', 'POST', 'DELETE'])
+def api_queue_handler():
+    global download_queue
+    if request.method == 'GET':
+        return jsonify({"queue": download_queue, "isProcessing": queue_worker_active})
+    elif request.method == 'POST':
+        data = request.json or {}
+        items = data.get('items', [])
+        for it in items:
+            it['id'] = str(int(time.time() * 1000)) + f"_{len(download_queue)}"
+            it['status'] = 'queued'
+            download_queue.append(it)
+        start_queue_worker_if_needed()
+        return jsonify({"success": True, "queue": download_queue})
+    elif request.method == 'DELETE':
+        item_id = request.args.get('id', '')
+        if item_id == 'all':
+            download_queue = [it for it in download_queue if it.get('status') == 'downloading']
+        else:
+            download_queue = [it for it in download_queue if it.get('id') != item_id]
+        return jsonify({"success": True, "queue": download_queue})
+
+def start_queue_worker_if_needed():
+    global queue_worker_active
+    if not queue_worker_active:
+        threading.Thread(target=process_queue_worker, daemon=True).start()
+
+def process_queue_worker():
+    global queue_worker_active, download_queue
+    queue_worker_active = True
+    try:
+        while True:
+            pending = [it for it in download_queue if it.get('status') == 'queued']
+            if not pending:
+                break
+            item = pending[0]
+            item['status'] = 'downloading'
+            try:
+                run_download(
+                    url=item.get('url', ''),
+                    fmt=item.get('format', 'mp4'),
+                    quality=item.get('quality', 'Best'),
+                    custom_name=item.get('customName', ''),
+                    playlist_mode=item.get('playlistMode', False),
+                    start_time=item.get('startTime', ''),
+                    end_time=item.get('endTime', ''),
+                    sponsor_block=item.get('sponsorBlock', False),
+                    browser_cookies=item.get('browserCookies', 'none'),
+                    embed_metadata=item.get('embedMetadata', True),
+                    video_codec=item.get('videoCodec', 'auto'),
+                    turbo_mode=item.get('turboMode', True),
+                    split_chapters=item.get('splitChapters', False)
+                )
+                item['status'] = 'completed'
+            except Exception as e:
+                item['status'] = 'failed'
+                item['error'] = str(e)
+            time.sleep(1)
+    finally:
+        queue_worker_active = False
 
 @app.route('/api/download', methods=['POST'])
 def api_download():
@@ -527,13 +761,16 @@ def api_download():
     browser_cookies = data.get('browserCookies', 'none')
     embed_metadata = data.get('embedMetadata', True)
     video_codec = data.get('videoCodec', 'auto')
+    turbo_mode = data.get('turboMode', True)
+    split_chapters = data.get('splitChapters', False)
     
     if not url:
         return jsonify({"success": False, "error": "No URL provided"})
     
     threading.Thread(target=run_download, args=(
         url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps, scale, dither,
-        boomerang, crop, speed, meme_top, meme_bottom, max_file_size, sponsor_block, browser_cookies, embed_metadata, video_codec
+        boomerang, crop, speed, meme_top, meme_bottom, max_file_size, sponsor_block, browser_cookies, embed_metadata, video_codec,
+        turbo_mode, split_chapters
     )).start()
     return jsonify({"success": True})
 
@@ -541,7 +778,7 @@ def api_download():
 def api_convert_local():
     data = request.json or {}
     input_file = data.get('filePath', '').strip()
-    target_format = data.get('format', 'gif') # gif, loop_mp4, webp, mp3, wav, flac
+    target_format = data.get('format', 'gif')
     custom_name = data.get('customName', '').strip()
     start_time = data.get('startTime', '').strip()
     end_time = data.get('endTime', '').strip()
@@ -575,6 +812,7 @@ def run_process(cmd_list):
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
+    ret_code = 1
     try:
         current_process = subprocess.Popen(
             cmd_list,
@@ -595,10 +833,12 @@ def run_process(cmd_list):
                     app_logs.pop(0)
 
         current_process.wait()
+        ret_code = current_process.returncode
     except Exception as e:
         app_logs.append(f"CRITICAL ERROR: {str(e)}")
     finally:
         current_process = None
+    return ret_code
 
 # --- HIGH-QUALITY VIDEO TO GIF / CONVERSION ENGINE ---
 def build_gif_filter_graph(fps_val, scale_val, dither_val, boomerang=False, crop_val='none', speed_val='1.0', meme_top='', meme_bottom=''):
@@ -612,13 +852,19 @@ def build_gif_filter_graph(fps_val, scale_val, dither_val, boomerang=False, crop
     except:
         pass
 
-    # 2. Aspect Ratio / Crop Filter
+    # 2. Aspect Ratio / Smart Blur Padding / Crop Filter
     if crop_val == '1:1':
         filters.append("crop=min(iw\\,ih):min(iw\\,ih)")
     elif crop_val == '9:16':
         filters.append("crop=ih*9/16:ih")
     elif crop_val == '4:3':
         filters.append("crop=ih*4/3:ih")
+    elif crop_val == '16:9_blur':
+        # Smart Blur Background (16:9)
+        filters.append("split[v0][v1];[v0]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bg];[v1]scale=-1:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
+    elif crop_val == '9:16_blur':
+        # Smart Blur Background (9:16)
+        filters.append("split[v0][v1];[v0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[v1]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
 
     # 3. FPS filter if specific fps requested
     if fps_val and fps_val != "original":
@@ -651,7 +897,6 @@ def build_gif_filter_graph(fps_val, scale_val, dither_val, boomerang=False, crop
     dither_opt = "bayer:bayer_scale=5" if dither_val == "bayer" else "sierra2_4a" if dither_val == "sierra" else "floyd_steinberg" if dither_val == "floyd" else "none"
     
     if boomerang:
-        # Boomerang: split, reverse, concat forward + reverse, then generate optimal palette
         graph = f"{prefix}split[v0][v1];[v1]reverse[vr];[v0][vr]concat=n=2:v=1:a=0[vcat];[vcat]split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff:reserve_transparent=on[p];[s1][p]paletteuse=dither={dither_opt}:diff_mode=rectangle"
     else:
         graph = f"{prefix}split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff:reserve_transparent=on[p];[s1][p]paletteuse=dither={dither_opt}:diff_mode=rectangle"
@@ -659,7 +904,8 @@ def build_gif_filter_graph(fps_val, scale_val, dither_val, boomerang=False, crop
 
 def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps="original", scale="original", dither="bayer",
                  boomerang=False, crop="none", speed="1.0", meme_top="", meme_bottom="", max_file_size="none",
-                 sponsor_block=False, browser_cookies="none", embed_metadata=True, video_codec="auto"):
+                 sponsor_block=False, browser_cookies="none", embed_metadata=True, video_codec="auto",
+                 turbo_mode=True, split_chapters=False):
     global app_logs
     app_logs.clear()
     check_cookies()
@@ -693,7 +939,6 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         run_process(cmd)
         
         if not os.path.exists(temp_video):
-            # Check if downloaded with another extension or title
             found_temp = None
             for f in os.listdir(download_dir):
                 if f.startswith(f"_temp_raw_{timestamp}"):
@@ -741,6 +986,8 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                 if crop == '1:1': vf.append("crop=min(iw\\,ih):min(iw\\,ih)")
                 elif crop == '9:16': vf.append("crop=ih*9/16:ih")
                 elif crop == '4:3': vf.append("crop=ih*4/3:ih")
+                elif crop == '16:9_blur': vf.append("split[v0][v1];[v0]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bg];[v1]scale=-1:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
+                elif crop == '9:16_blur': vf.append("split[v0][v1];[v0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[v1]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
             if fps and fps != "original": vf.append(f"fps={fps}")
             if scale and scale != "original":
                 if scale == "1080p": vf.append("scale=-1:1080:flags=lanczos")
@@ -750,7 +997,6 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             conv_cmd = [FFMPEG_EXE, "-y", "-i", temp_video, "-vf", vf_str, "-vcodec", "libwebp", "-q:v", "90", "-loop", "0", "-an", final_output]
             run_process(conv_cmd)
 
-        # Cleanup temp file
         try:
             if os.path.exists(temp_video):
                 os.remove(temp_video)
@@ -767,6 +1013,14 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         output_path = os.path.join(download_dir, filename_template)
         
         cmd = [YTDLP_EXE]
+        
+        # Turbo Acceleration with aria2c
+        used_aria = False
+        if turbo_mode and os.path.exists(ARIA2C_EXE):
+            cmd.extend(["--downloader", ARIA2C_EXE, "--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16"])
+            used_aria = True
+            app_logs.append("⚡ Turbo Acceleration Active: 16x Multi-Thread Engine enabled.")
+            
         if browser_cookies and browser_cookies != 'none':
             cmd.extend(["--cookies-from-browser", browser_cookies])
         elif os.path.exists(COOKIES_STORED):
@@ -782,6 +1036,10 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             cmd.extend(["-S", "vcodec:h264,res,acodec:m4a"])
         elif video_codec == 'av1':
             cmd.extend(["-S", "vcodec:av01,res"])
+        
+        if split_chapters:
+            cmd.extend(["--split-chapters", "-o", "chapter:%(title)s/%(section_number)02d - %(section_title)s.%(ext)s"])
+            app_logs.append("🎵 Smart Chapter Splitter Active: Will organize songs into dedicated album folder.")
         
         if fmt == 'wav':
             cmd.extend(["-f", "bestaudio", "--extract-audio", "--audio-format", "wav", "--audio-quality", "0"])
@@ -813,14 +1071,23 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         if start_time and end_time:
             cmd.extend(["--download-sections", f"*{start_time}-{end_time}"])
             
-        cmd.extend(["--newline", "-o", output_path])
+        if not split_chapters:
+            cmd.extend(["--newline", "-o", output_path])
+        else:
+            cmd.extend(["--newline"])
         
         if not playlist_mode:
             cmd.insert(1, "--no-playlist")
         
         cmd.append(url)
         app_logs.append(f"Starting universal download...")
-        run_process(cmd)
+        ret = run_process(cmd)
+        
+        # Transparent Auto-Fallback if aria2c was blocked by host
+        if ret != 0 and used_aria:
+            app_logs.append("Turbo accelerator encountered server connection throttle. Automatically retrying with native downloader...")
+            cmd_fallback = [c for c in cmd if c not in ("--downloader", ARIA2C_EXE, "--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16")]
+            run_process(cmd_fallback)
         
         # Track history
         valid_exts = ('.mp3', '.mp4', '.wav', '.flac', '.webm', '.gif')
@@ -834,6 +1101,8 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                 try: fname = l.split('"')[1].strip()
                 except: pass
             elif "[ExtractAudio] Destination:" in l:
+                fname = l.split("Destination: ")[-1].strip()
+            elif "[ChapterSplit] Destination:" in l:
                 fname = l.split("Destination: ")[-1].strip()
                 
             if fname:
@@ -878,6 +1147,8 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
             if crop == '1:1': vf.append("crop=min(iw\\,ih):min(iw\\,ih)")
             elif crop == '9:16': vf.append("crop=ih*9/16:ih")
             elif crop == '4:3': vf.append("crop=ih*4/3:ih")
+            elif crop == '16:9_blur': vf.append("split[v0][v1];[v0]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bg];[v1]scale=-1:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
+            elif crop == '9:16_blur': vf.append("split[v0][v1];[v0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[v1]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
         if fps and fps != "original": vf.append(f"fps={fps}")
         if scale and scale != "original":
             if scale == "1080p": vf.append("scale=-1:1080:flags=lanczos")
@@ -907,7 +1178,7 @@ def start_flask():
     import logging
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
-    app.run(host='127.0.0.1', port=54321, threaded=True)
+    app.run(host='0.0.0.0', port=54321, threaded=True)
 
 if __name__ == '__main__':
     initialize_assets()

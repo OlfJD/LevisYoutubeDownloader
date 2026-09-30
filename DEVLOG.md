@@ -68,27 +68,34 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
-### **v1.1.0-dev** (2026-09-29) - *The Master Media Engine & GIF Studio Update*
+### **v1.1.0-dev** (2026-09-30) - *The Master Media Engine, Live Stream DVR & Spatial Studio Update*
+- **3-Screen Spatial Navigation Architecture**:
+  - **Left Screen: 🔵 Live Stream DVR Studio (`#3B82F6` Sapphire Blue)**:
+    - Dedicated live broadcast recorder for YouTube Live and Twitch streams.
+    - Full `--live-from-start` rewind DVR buffer support: record broadcasts from beginning even if joining mid-stream.
+    - Live Telemetry HUD with real-time duration counter, live MB size counter, stream waveform visualizer, and 1-click `■ Stop & Finalize MP4`.
+  - **Center Screen: 🎬 Universal Media Downloader (`#FF0033` Rose / Emerald / Obsidian)**:
+    - Classic 3-button layout with symmetrical left (`DVR 🔴`) and right (`GIF ⚡`) glide arrows.
+  - **Right Screen: ⚡ Advanced GIF Machine (`#F59E0B` Amber Yellow)**:
+    - High-fidelity 2-pass palettegen GIF studio with boomerang, meme text banners, and multi-speed controls.
+- **Turbo 16x Multi-Thread Acceleration (`aria2c`) with Auto-Fallback**:
+  - Pre-bundled static 64-bit `aria2c.exe` in `tools/` with `--downloader aria2c --downloader-args "aria2c:-x 16 -s 16 -k 1M -j 16"`.
+  - Bypasses per-connection server throttling for 5x–10x faster downloads on 4K/1080p60 media.
+  - Transparent error recovery: if a host blocks multi-part requests, the engine automatically retries with native `yt-dlp` without failing.
+- **Smart Chapter / Album Splitter**:
+  - Automatically detects YouTube tracklists/chapters and organizes full concert/album videos into clean folders with individual numbered MP3/FLAC tracks (`--split-chapters`) with tags and embedded album art.
+- **Local Wi-Fi Quick Share (Instant QR Code to Phone)**:
+  - 1-click "📱 Share" action on any completed download in History or Queue.
+  - Generates instant high-contrast QR code via `qrcode` for camera scanning over LAN (`http://<ip>:54321/api/download_file/<filename>`), downloading directly to mobile without cables.
+- **Smart-Blur Background Margin Filters (Aspect Ratio Padding)**:
+  - Added `16:9 (Smart Blur Background)` and `9:16 (Smart Blur Background)` in GIF & Video studio using two-pass FFmpeg boxblur padding filter graphs.
+- **Smart Clipboard Link Auto-Detector**:
+  - Real-time clipboard watcher displaying an animated floating glass pill when media links (YouTube, Twitch, TikTok, Twitter/X) are copied to Windows clipboard.
 - **Obsidian Glass Custom Dropdowns**:
   - Replaced standard white Windows OS `<select>` / `<option>` menus with custom tactile dark Obsidian Glass dropdown components (`CustomDropdown.tsx`).
   - Added support for keyboard accessibility, smooth framer-motion micro-animations, custom badge chips, and click-outside dismissal.
-- **GIF Studio & Engine Power Suite**:
-  - **Boomerang Ping-Pong Loop**: Seamless forward + reverse bounce loop filter (`concat + reverse + palettegen`).
-  - **Aspect Ratio Cropping**: Smart crop presets for `1:1 Square` (Instagram/Avatars), `9:16 Vertical` (TikTok/Shorts/Reels), `4:3 Classic TV`, and `16:9 Widescreen`.
-  - **Playback Speed Multiplier**: Multi-speed PTS manipulation (`0.5x Slowmo`, `0.75x`, `1.0x`, `1.25x`, `1.5x`, `2.0x Fast`).
-  - **Meme Caption Banners**: Classic Impact meme text rendering (`drawtext` filter with white fill and thick black stroke) for top and bottom titles.
-  - **Max File Size Targets**: Compression target presets for Discord Free (8 MB), Twitter / X (15 MB), Discord Nitro (25 MB), and Web / Telegram (50 MB).
-  - **Master 2-Pass Palettegen Filter**: Optimal 256-color palette extraction with Bayer matrix scale 5, Sierra 2-4A, and Floyd-Steinberg dithering for 60fps true-color quality.
-  - **Branding & Visual Hierarchy**: Refined GIF Machine branding with radiant Yellow/Amber (`#F59E0B`) accents, dedicated action buttons, and streamlined navigation without redundant return pills.
-  - **Geometry & Button Alignment**: Standardized `MainView` and `GifMachineView` within matching `w-[1050px]` frame envelopes. Floating navigation buttons (GIF button on Page 1 and Back button on Page 2) now share identical horizontal coordinate offsets (`-right-16` / `-left-16` @ 589px from window center), eliminating dead space discrepancies.
-  - **Dropdown Boundary & Popover Unclipping**: Configured custom Obsidian dropdowns with right-aligned popovers (`right-0`), eliminating rightward overflow truncation inside settings scroll panels while maintaining generous label-to-control spacing.
 - **Universal Downloader Power Settings**:
-  - **SponsorBlock Integration**: Automatic detection and removal of sponsor segments, intros, outros, and self-promotions.
-  - **Browser Cookie Extractor & Sync**: 1-click session cookie extraction from Google Chrome, Mozilla Firefox, Brave, Microsoft Edge, Opera, and Vivaldi.
-  - **Video Codec Prioritization**: Selectable preference for `Auto (Best)`, `H.264 / AVC (Max Compatibility)`, or `AV1 / VP9 (Max Compression)`.
-  - **Metadata & Album Art Embedding**: Embedded thumbnail and tag injection toggles for audio and video streams.
-- **Authentic OG Log Console**:
-  - Restored classic Obsidian dark terminal styling with dedicated filter chips (`All Logs`, `Engine Stream`, `Errors`), instant clipboard copy, and realtime streaming output.
+  - SponsorBlock integration, 1-click browser cookie synchronization (Chrome, Firefox, Brave, Edge, Opera, Vivaldi), video codec selector, and metadata embedding.
 
 ### **v1.0.5** (2026-09-29)
 - **UI & Aesthetics**: Replaced standard white Windows OS `<select>` / `<option>` dropdown menus with custom tactile dark Obsidian Glass dropdown components (`CustomDropdown.tsx`).
