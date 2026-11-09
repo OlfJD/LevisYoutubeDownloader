@@ -10,7 +10,7 @@ import {
   History, Scissors, Volume2, Check, Video, Play, Sliders,
   Repeat, Crop, Type, Globe, Shield, Download, Cookie, CheckCircle2,
   AlertCircle, Copy, Trash2, Smartphone, Radio, Zap, ListPlus,
-  Layers, QrCode
+  Layers, QrCode, Key, FileText, Lock, Eye, EyeOff, HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import QRCode from 'qrcode';
@@ -157,6 +157,7 @@ export default function App() {
   const [customName, setCustomName] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
+  const [authErrorDetected, setAuthErrorDetected] = useState(false);
   
   // Downloader Settings State
   const [playlistMode, setPlaylistMode] = useState(false);
@@ -169,7 +170,17 @@ export default function App() {
   const [maxFileSize, setMaxFileSize] = useState('none');
   const [turboMode, setTurboMode] = useState(true);
   const [splitChapters, setSplitChapters] = useState(false);
-  const [clipboardMonitor, setClipboardMonitor] = useState(true);
+  const [downloadFolder, setDownloadFolder] = useState('');
+  const [twitchToken, setTwitchToken] = useState('');
+  const [cookieStatus, setCookieStatus] = useState<{
+    hasCookies: boolean;
+    summary: string;
+    hasTwitch: boolean;
+    hasYouTube: boolean;
+    twitchToken: string;
+    browserCookies: string;
+    fileSize: number;
+  } | null>(null);
 
   // Update Status State
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -203,16 +214,25 @@ export default function App() {
   // Wi-Fi Share Modal State
   const [shareModalFile, setShareModalFile] = useState<{ filename: string; shareUrl: string; ip: string; port: number } | null>(null);
 
-  // Smart Clipboard Monitor State
-  const [clipboardToastUrl, setClipboardToastUrl] = useState<string | null>(null);
-  const [dismissedClipboardUrl, setDismissedClipboardUrl] = useState<string | null>(null);
-
-  // Pull real history items
+  // Pull real history items & cookie status
   const fetchHistory = () => {
     fetch('/api/history').then(r=>r.json()).then(d => setHistoryItems(d || [])).catch(e=>{});
   };
 
-  useEffect(() => { fetchHistory(); }, []);
+  const fetchCookieStatus = () => {
+    fetch('/api/cookie_status')
+      .then(r => r.json())
+      .then(d => {
+        setCookieStatus(d);
+        if (d && d.twitchToken) setTwitchToken(d.twitchToken);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => { 
+    fetchHistory();
+    fetchCookieStatus();
+  }, []);
 
   // Trigger Share Modal for a file
   const handleOpenShareModal = async (filename: string) => {
@@ -226,35 +246,6 @@ export default function App() {
       console.error("Share info error:", e);
     }
   };
-
-  // Smart Clipboard Monitor Loop
-  useEffect(() => {
-    if (!clipboardMonitor) return;
-
-    const checkClipboard = async () => {
-      try {
-        if (document.hasFocus()) {
-          const text = await navigator.clipboard.readText();
-          if (text && typeof text === 'string') {
-            const clean = text.trim();
-            const isMediaUrl = /https?:\/\/(www\.)?(youtube\.com|youtu\.be|tiktok\.com|twitter\.com|x\.com|twitch\.tv|instagram\.com|reddit\.com)/i.test(clean);
-            if (isMediaUrl && clean !== url && clean !== dismissedClipboardUrl) {
-              setClipboardToastUrl(clean);
-            }
-          }
-        }
-      } catch (e) {
-        // Ignored if clipboard permissions are restricted
-      }
-    };
-
-    window.addEventListener('focus', checkClipboard);
-    const interval = setInterval(checkClipboard, 3000);
-    return () => {
-      window.removeEventListener('focus', checkClipboard);
-      clearInterval(interval);
-    };
-  }, [clipboardMonitor, url, dismissedClipboardUrl]);
 
   // Automatic Background Startup Update Check
   const checkUpdates = async (force: boolean = false) => {
@@ -320,7 +311,8 @@ export default function App() {
         if (d.gifMaxFileSize) setGifMaxFileSize(d.gifMaxFileSize);
         if (d.turboMode !== undefined) setTurboMode(d.turboMode);
         if (d.splitChapters !== undefined) setSplitChapters(d.splitChapters);
-        if (d.clipboardMonitor !== undefined) setClipboardMonitor(d.clipboardMonitor);
+        if (d.downloadDir) setDownloadFolder(d.downloadDir);
+        if (d.twitchToken) setTwitchToken(d.twitchToken);
       })
       .catch(() => {});
   }, []);
@@ -346,7 +338,6 @@ export default function App() {
   const handleGifMaxFileSizeChange = (m: string) => { setGifMaxFileSize(m); saveSettings({ gifMaxFileSize: m }); };
   const handleTurboModeChange = (t: boolean) => { setTurboMode(t); saveSettings({ turboMode: t }); };
   const handleSplitChaptersChange = (sc: boolean) => { setSplitChapters(sc); saveSettings({ splitChapters: sc }); };
-  const handleClipboardMonitorChange = (cm: boolean) => { setClipboardMonitor(cm); saveSettings({ clipboardMonitor: cm }); };
 
   // View switches (3-Screen Glide Navigation)
   const handleSwitchToLiveDvr = () => {
@@ -402,7 +393,21 @@ export default function App() {
 
   const changeDownloadFolder = async () => {
     try {
-      await fetch('/api/change_folder', { method: 'POST' });
+      const res = await fetch('/api/change_folder', { method: 'POST' });
+      const data = await res.json();
+      if (data && data.folder) {
+        setDownloadFolder(data.folder);
+      }
+    } catch (error) {}
+  };
+
+  const openDownloadFolder = async (folderPath?: string) => {
+    try {
+      await fetch('/api/open_folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: folderPath || downloadFolder })
+      });
     } catch (error) {}
   };
 
@@ -450,39 +455,6 @@ export default function App() {
     >
       {/* Seamless Custom Header */}
       <CustomTitleBar theme={theme} />
-
-      {/* Floating Smart Clipboard Toast */}
-      <AnimatePresence>
-        {clipboardToastUrl && activeView === 'main' && (
-          <motion.div
-            initial={{ y: -30, opacity: 0, scale: 0.95 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: -30, opacity: 0, scale: 0.95 }}
-            className="absolute top-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 rounded-full border border-rose-500/30 shadow-2xl backdrop-blur-2xl bg-black/80 text-white text-xs font-medium"
-          >
-            <Sparkles size={15} className="text-rose-400 shrink-0 animate-pulse" />
-            <span className="truncate max-w-[280px]">Link in Clipboard: <strong className="text-rose-300">{clipboardToastUrl}</strong></span>
-            <button
-              onClick={() => {
-                setUrl(clipboardToastUrl);
-                setClipboardToastUrl(null);
-              }}
-              className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full font-bold transition-all shrink-0 text-xs shadow-md"
-            >
-              Paste Link
-            </button>
-            <button
-              onClick={() => {
-                setDismissedClipboardUrl(clipboardToastUrl);
-                setClipboardToastUrl(null);
-              }}
-              className="p-1 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors"
-            >
-              <X size={14} />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="flex-1 flex flex-col items-center justify-between pt-4 pb-20 relative">
         
@@ -544,6 +516,8 @@ export default function App() {
                   changeDownloadFolder={changeDownloadFolder}
                   handleUpdate={handleUpdate}
                   setDownloadError={setDownloadError}
+                  authErrorDetected={authErrorDetected}
+                  setAuthErrorDetected={setAuthErrorDetected}
                   customName={customName}
                   setCustomName={setCustomName}
                   fetchHistory={fetchHistory}
@@ -573,7 +547,11 @@ export default function App() {
                   handleSwitchToMain={handleSwitchToMain}
                   fetchHistory={fetchHistory}
                   browserCookies={browserCookies}
+                  cookieStatus={cookieStatus}
                   onShareFile={handleOpenShareModal}
+                  downloadFolder={downloadFolder}
+                  changeDownloadFolder={changeDownloadFolder}
+                  openDownloadFolder={openDownloadFolder}
                 />
               </motion.div>
             )}
@@ -650,8 +628,6 @@ export default function App() {
                   setTurboMode={handleTurboModeChange}
                   splitChapters={splitChapters}
                   setSplitChapters={handleSplitChaptersChange}
-                  clipboardMonitor={clipboardMonitor}
-                  setClipboardMonitor={handleClipboardMonitorChange}
                   gifFps={gifFps}
                   setGifFps={handleGifFpsChange}
                   gifScale={gifScale}
@@ -662,9 +638,15 @@ export default function App() {
                   setGifAudioLoop={handleGifAudioLoopChange}
                   gifMaxFileSize={gifMaxFileSize}
                   setGifMaxFileSize={handleGifMaxFileSizeChange}
+                  downloadFolder={downloadFolder}
                   changeDownloadFolder={changeDownloadFolder}
+                  openDownloadFolder={openDownloadFolder}
                   historyItems={historyItems}
                   onShareFile={handleOpenShareModal}
+                  cookieStatus={cookieStatus}
+                  fetchCookieStatus={fetchCookieStatus}
+                  twitchToken={twitchToken}
+                  setTwitchToken={setTwitchToken}
                 />
               </motion.div>
             )}
@@ -793,24 +775,63 @@ export default function App() {
               initial={{ opacity: 0, y: -20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.9 }}
-              className="absolute top-6 left-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-3xl border border-white/5 shadow-2xl backdrop-blur-3xl overflow-hidden group"
-              style={{ backgroundColor: `${theme.panelOuter}e6`, color: theme.textMain, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.1), 0 10px 30px rgba(0,0,0,0.3)` }}
+              className="absolute top-6 left-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-3xl border shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[340px]"
+              style={{ 
+                backgroundColor: `${theme.panelOuter}f2`, 
+                color: theme.textMain, 
+                borderColor: authErrorDetected ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.1)',
+                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.1), 0 10px 30px rgba(0,0,0,0.4)` 
+              }}
             >
-              <div className="flex items-center justify-between gap-6 relative z-10">
-                <div className="flex items-center gap-3">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
-                  <span className="font-bold tracking-wide text-lg text-white">Download Failed</span>
+              <div className="flex items-center justify-between gap-4 relative z-10">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-2.5 h-2.5 rounded-full ${authErrorDetected ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+                  <span className="font-bold tracking-wide text-base text-white">
+                    {authErrorDetected ? "Subscriber / Auth Required" : "Download Failed"}
+                  </span>
                 </div>
                 <button onClick={() => setDownloadError(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
               </div>
-              <p className="text-sm font-medium relative z-10 w-[240px] leading-relaxed" style={{ color: theme.textSecondary }}>The process encountered an error. Please check the logs or update the tool.</p>
-              <button
-                 onClick={() => { setDownloadError(false); handleUpdate(); }}
-                 className="mt-2 font-bold py-2.5 px-4 rounded-2xl transition-all active:translate-y-[2px]"
-                 style={{ backgroundColor: theme.accent, color: theme.inputBg, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 rgba(0,0,0,0.3)` }}
-              >
-                Update Tool
-              </button>
+              <p className="text-xs font-medium relative z-10 leading-relaxed text-gray-300">
+                {authErrorDetected 
+                  ? "This Twitch VOD or stream is subscriber-only or requires account login. Configure credentials in Cookie Settings."
+                  : "The download process encountered an error. Check logs for details or update the tool."}
+              </p>
+              <div className="flex gap-2 mt-1">
+                {authErrorDetected ? (
+                  <>
+                    <button
+                       onClick={() => { setDownloadError(false); setActiveView('settings'); }}
+                       className="flex-1 font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white shadow-md cursor-pointer"
+                    >
+                      <Key size={13} />
+                      <span>Cookie Settings</span>
+                    </button>
+                    <button
+                       onClick={() => { setDownloadError(false); setActiveView('log'); }}
+                       className="font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
+                    >
+                      Logs
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                       onClick={() => { setDownloadError(false); handleUpdate(); }}
+                       className="flex-1 font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 text-white cursor-pointer"
+                       style={{ backgroundColor: theme.accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 rgba(0,0,0,0.3)` }}
+                    >
+                      Update Tool
+                    </button>
+                    <button
+                       onClick={() => { setDownloadError(false); setActiveView('log'); }}
+                       className="font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
+                    >
+                      Logs
+                    </button>
+                  </>
+                )}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -849,7 +870,7 @@ export default function App() {
 function MainView({ 
   url, setUrl, theme, playlistMode, setActiveView, handleSwitchToGif, handleSwitchToLiveDvr,
   startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, 
-  setDownloadError, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, 
+  setDownloadError, authErrorDetected, setAuthErrorDetected, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, 
   showUpdatePopup, setShowUpdatePopup, splitChapters, setSplitChapters, onShareFile
 }: any) {
   const [progress, setProgress] = useState(0);
@@ -873,11 +894,16 @@ function MainView({
 
         const isDone = logs.some(l => l.includes('Process Finished Successfully!'));
         const isError = logs.some(l => l.includes('CRITICAL ERROR:'));
+        const isAuth = logs.some(l => l.includes('AUTHENTICATION REQUIRED') || l.includes('AUTHENTICATION ERROR') || l.includes('subscriber-only'));
 
         if (isDone || isError) {
             setIsDownloading(false);
-            if (isError) setDownloadError(true);
-            else setCustomName('');
+            if (isError) {
+                setDownloadError(true);
+                if (setAuthErrorDetected) setAuthErrorDetected(Boolean(isAuth));
+            } else {
+                setCustomName('');
+            }
             fetchHistory();
             return;
         }
@@ -888,12 +914,17 @@ function MainView({
           if (match) setProgress(parseFloat(match[1]));
         }
 
-        const pMatch = logs.find(l => typeof l === 'string' && l.includes('Downloading video '));
+        // Search from the end: the newest line is the current item (find() kept showing "Video 1 of N")
+        const findLatest = (pred: (l: string) => boolean) => {
+          for (let i = logs.length - 1; i >= 0; i--) if (typeof logs[i] === 'string' && pred(logs[i])) return logs[i];
+          return undefined;
+        };
+        const pMatch = findLatest(l => l.includes('Downloading video '));
         if (pMatch) {
             const m = pMatch.match(/Downloading video (\d+) of (\d+)/);
             if (m) setDownloadTitle(`Video ${m[1]} of ${m[2]}`);
         } else if (!customName) {
-            const nameLog = logs.find(l => typeof l === 'string' && l.includes('[download] Destination:'));
+            const nameLog = findLatest(l => l.includes('[download] Destination:'));
             if (nameLog) {
                 let file = nameLog.split('Destination: ')[1].split('\\').pop().split('/').pop();
                 file = file.replace(/\.f\d+\.(m4a|webm|mp4)$/, '');
@@ -1051,11 +1082,12 @@ function MainView({
 // Real-time broadcast recording, --live-from-start rewind & HUD telemetry
 // -------------------------------------------------------------
 function LiveDvrView({ 
-  theme, setActiveView, handleSwitchToMain, fetchHistory, browserCookies, onShareFile 
+  theme, setActiveView, handleSwitchToMain, fetchHistory, browserCookies, onShareFile,
+  downloadFolder, changeDownloadFolder, openDownloadFolder
 }: any) {
   const [liveUrl, setLiveUrl] = useState('');
   const [liveQuality, setLiveQuality] = useState('Best');
-  const [liveFromStart, setLiveFromStart] = useState(true);
+  const [liveFromStart, setLiveFromStart] = useState(false);
   const [customLiveName, setCustomLiveName] = useState('');
   
   const [recordingStatus, setRecordingStatus] = useState<any>({
@@ -1097,7 +1129,8 @@ function LiveDvrView({
           quality: liveQuality,
           liveFromStart: liveFromStart,
           customName: customLiveName,
-          browserCookies: browserCookies
+          browserCookies: browserCookies,
+          downloadDir: downloadFolder
         })
       });
     } catch(e) {
@@ -1176,9 +1209,9 @@ function LiveDvrView({
             </span>
           </div>
 
-          <div className="flex flex-col gap-3.5">
+          <div className="flex flex-col gap-3">
             {/* Live Stream URL Input */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
               <span className="text-xs font-bold text-gray-300">Paste Live Stream URL:</span>
               <input 
                 type="text"
@@ -1191,7 +1224,7 @@ function LiveDvrView({
             </div>
 
             {/* Rewind & Start From Beginning (DVR Buffer) */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-white flex items-center gap-1.5">
                   <Repeat size={16} className="text-blue-400" />
@@ -1217,35 +1250,69 @@ function LiveDvrView({
             </div>
 
             {/* Custom File Name */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1">
               <span className="text-xs font-bold text-gray-300">Custom Recording Name (Optional):</span>
               <input 
                 type="text"
                 value={customLiveName}
                 onChange={e => setCustomLiveName(e.target.value)}
                 disabled={isRecording}
-                placeholder="Leave blank for automatic broadcast title..."
-                className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-xs text-white outline-none disabled:opacity-50"
+                placeholder="Leave blank for: Channel - Title..."
+                className="w-full px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-xs text-white outline-none disabled:opacity-50"
               />
             </div>
 
-            {/* Stream Quality Selector */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-300">Stream Quality:</span>
-              <CustomDropdown 
-                value={liveQuality}
-                options={[
-                  { value: 'Best', label: 'Best (Source Quality)', badge: 'Max' },
-                  { value: '1080p', label: '1080p Full HD' },
-                  { value: '720p', label: '720p HD' },
-                  { value: '480p', label: '480p SD' },
-                ]}
-                onChange={setLiveQuality}
-                theme={theme}
-                variant="tactile-light"
-                size="sm"
-                accentColor={theme.liveAccent}
-              />
+            {/* Stream Quality Selector & Save Folder Grid */}
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Stream Quality */}
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
+                <span className="text-xs font-bold text-gray-300">Stream Quality:</span>
+                <CustomDropdown 
+                  value={liveQuality}
+                  options={[
+                    { value: 'Best', label: 'Best (Source)', badge: 'Max' },
+                    { value: '1080p', label: '1080p FHD' },
+                    { value: '720p', label: '720p HD' },
+                    { value: '480p', label: '480p SD' },
+                  ]}
+                  onChange={setLiveQuality}
+                  theme={theme}
+                  variant="tactile-light"
+                  size="sm"
+                  accentColor={theme.liveAccent}
+                />
+              </div>
+
+              {/* Destination Save Folder */}
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col justify-between gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-300 flex items-center gap-1">
+                    <FolderOpen size={13} className="text-blue-400" />
+                    <span>Save Folder:</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {downloadFolder && (
+                      <button
+                        onClick={() => openDownloadFolder(downloadFolder)}
+                        className="p-1 rounded bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-all active:scale-95 cursor-pointer"
+                        title="Open in Windows Explorer"
+                      >
+                        <FolderOpen size={11} />
+                      </button>
+                    )}
+                    <button
+                      onClick={changeDownloadFolder}
+                      disabled={isRecording}
+                      className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+                </div>
+                <div className="text-[10px] font-mono text-gray-400 truncate bg-black/40 px-2 py-1 rounded border border-white/5" title={downloadFolder || 'Downloads (Default)'}>
+                  {downloadFolder ? (downloadFolder.length > 26 ? '...' + downloadFolder.slice(-23) : downloadFolder) : 'Downloads (Default)'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1305,7 +1372,7 @@ function LiveDvrView({
                 </div>
 
                 <div className="text-xs text-gray-400 truncate">
-                  Stream Output: <span className="font-mono text-white">{recordingStatus?.filename || 'Levi_Live_Stream.mp4'}</span>
+                  Stream Output: <span className="font-mono text-white">{recordingStatus?.filename || 'Resolving broadcast title...'}</span>
                 </div>
               </>
             ) : (
@@ -1946,13 +2013,15 @@ function SettingsView({
   videoCodec, setVideoCodec,
   turboMode, setTurboMode,
   splitChapters, setSplitChapters,
-  clipboardMonitor, setClipboardMonitor,
   gifFps, setGifFps, 
   gifScale, setGifScale, 
   gifDither, setGifDither, 
   gifAudioLoop, setGifAudioLoop, 
   gifMaxFileSize, setGifMaxFileSize,
-  changeDownloadFolder, historyItems, onShareFile
+  downloadFolder, changeDownloadFolder, openDownloadFolder,
+  historyItems, onShareFile,
+  cookieStatus, fetchCookieStatus,
+  twitchToken, setTwitchToken
 }: any) {
   const isGifSection = activeSection === 'gif';
   const isLiveSection = activeSection === 'live_dvr';
@@ -1960,6 +2029,15 @@ function SettingsView({
 
   const [cookieSyncStatus, setCookieSyncStatus] = useState<string | null>(null);
   const [isSyncingCookies, setIsSyncingCookies] = useState(false);
+  const [isImportingCookies, setIsImportingCookies] = useState(false);
+  const [twitchTokenInput, setTwitchTokenInput] = useState(twitchToken || '');
+  const [isSavingToken, setIsSavingToken] = useState(false);
+  const [showTokenText, setShowTokenText] = useState(false);
+  const [showTwitchHelp, setShowTwitchHelp] = useState(false);
+
+  useEffect(() => {
+    if (twitchToken) setTwitchTokenInput(twitchToken);
+  }, [twitchToken]);
 
   const handleSyncBrowserCookies = async (browser: string) => {
     if (isSyncingCookies) return;
@@ -1973,16 +2051,71 @@ function SettingsView({
       });
       const data = await res.json();
       if (data.success) {
-        setCookieSyncStatus(`Success! Cookies synced from ${browser}.`);
+        setCookieSyncStatus(`Success! Cookies synced.`);
         setBrowserCookies(browser);
+        if (fetchCookieStatus) fetchCookieStatus();
       } else {
-        setCookieSyncStatus(`Error: ${data.error || 'Failed'}`);
+        setCookieSyncStatus(`Note: ${data.error || 'Failed'}`);
       }
     } catch(e: any) {
       setCookieSyncStatus(`Failed: ${e.message}`);
     } finally {
       setIsSyncingCookies(false);
     }
+  };
+
+  const handleImportCookiesFile = async () => {
+    if (isImportingCookies) return;
+    setIsImportingCookies(true);
+    try {
+      const res = await fetch('/api/import_cookies', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setCookieSyncStatus("Cookies imported successfully!");
+        if (fetchCookieStatus) fetchCookieStatus();
+      } else if (data.error && data.error !== 'Dialog cancelled or window unavailable') {
+        setCookieSyncStatus(`Import error: ${data.error}`);
+      }
+    } catch(e: any) {
+      setCookieSyncStatus(`Import failed: ${e.message}`);
+    } finally {
+      setIsImportingCookies(false);
+    }
+  };
+
+  const handleSaveTwitchToken = async () => {
+    if (isSavingToken) return;
+    setIsSavingToken(true);
+    try {
+      const res = await fetch('/api/save_twitch_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: twitchTokenInput })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (setTwitchToken) setTwitchToken(twitchTokenInput);
+        if (fetchCookieStatus) fetchCookieStatus();
+        setCookieSyncStatus(twitchTokenInput ? "Twitch token saved!" : "Twitch token cleared.");
+      }
+    } catch(e: any) {
+      setCookieSyncStatus(`Error: ${e.message}`);
+    } finally {
+      setIsSavingToken(false);
+    }
+  };
+
+  const handleClearCookies = async () => {
+    try {
+      const res = await fetch('/api/clear_cookies', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setTwitchTokenInput('');
+        if (setTwitchToken) setTwitchToken('');
+        if (fetchCookieStatus) fetchCookieStatus();
+        setCookieSyncStatus("All cookies and tokens cleared.");
+      }
+    } catch(e) {}
   };
 
   const displayedHistory = isGifSection 
@@ -2145,32 +2278,7 @@ function SettingsView({
                   </button>
                 </div>
 
-                {/* 3. Smart Clipboard Monitor */}
-                <div className="flex items-center justify-between mx-2 pt-0.5">
-                  <div className="flex flex-col">
-                    <span className="text-[14px] font-medium flex items-center gap-1.5 text-white">
-                      <Sparkles size={16} className="text-rose-400" />
-                      <span>Smart Clipboard Link Monitor</span>
-                    </span>
-                    <span className="text-[10px] text-gray-400">Shows floating 1-click download pill on copy</span>
-                  </div>
-                  <button 
-                    onClick={() => setClipboardMonitor(!clipboardMonitor)} 
-                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4 shrink-0" 
-                    style={{ backgroundColor: clipboardMonitor ? theme.accent : '#555' }}
-                  >
-                    <div 
-                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
-                      style={{ 
-                        backgroundColor: clipboardMonitor ? theme.inputBg : '#a0a0a8', 
-                        left: clipboardMonitor ? 'auto' : '-3px', 
-                        right: clipboardMonitor ? '-3px' : 'auto' 
-                      }} 
-                    />
-                  </button>
-                </div>
-
-                {/* 4. Download Quality */}
+                {/* 3. Download Quality */}
                 <div className="flex items-center justify-between mx-2">
                   <span className="text-[14px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
                   <CustomDropdown 
@@ -2184,7 +2292,7 @@ function SettingsView({
                   />
                 </div>
 
-                {/* 5. SponsorBlock */}
+                {/* 4. SponsorBlock */}
                 <div className="flex items-center justify-between mx-2">
                   <div className="flex flex-col">
                     <span className="text-[14px] font-medium flex items-center gap-1.5" style={{ color: theme.textMain }}>
@@ -2208,39 +2316,132 @@ function SettingsView({
                   </button>
                 </div>
 
-                {/* 6. Browser Cookie Extractor */}
-                <div className="flex flex-col gap-1.5 mx-2 p-2 rounded-xl bg-black/30 border border-white/5">
+                {/* 5. Master Authentication & Cookie Manager (Twitch Sub VODs & Members) */}
+                <div className="flex flex-col gap-2.5 mx-2 p-3 rounded-2xl bg-black/40 border border-white/10 shadow-inner">
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-medium flex items-center gap-1.5 text-white">
-                      <Cookie size={13} className="text-amber-400" />
-                      <span>Browser Cookie Sync:</span>
-                    </span>
-                    {cookieSyncStatus && (
-                      <span className="text-[10px] font-mono text-amber-300 truncate max-w-[130px]">{cookieSyncStatus}</span>
+                    <div className="flex items-center gap-2">
+                      <Cookie size={16} className="text-amber-400" />
+                      <span className="text-[13px] font-bold text-white">Authentication & Cookies</span>
+                    </div>
+                    {cookieStatus?.hasCookies ? (
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="truncate max-w-[140px]">{cookieStatus.summary}</span>
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        ○ No Cookies Loaded
+                      </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <CustomDropdown 
-                      value={browserCookies}
-                      options={browserOptions}
-                      onChange={setBrowserCookies}
-                      theme={theme}
-                      variant="glass-dark"
-                      size="sm"
-                      accentColor={accentColor}
-                      className="flex-1"
-                    />
+
+                  {/* Twitch Auth Token Quick Input */}
+                  <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-white/5 border border-white/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-gray-300 flex items-center gap-1">
+                        <Key size={12} className="text-purple-400" />
+                        <span>Twitch Auth Token (Sub-Only VODs):</span>
+                      </span>
+                      <button 
+                        onClick={() => setShowTwitchHelp(!showTwitchHelp)}
+                        className="text-[10px] text-purple-400 hover:text-purple-300 underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <HelpCircle size={11} />
+                        <span>How to get token?</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <input 
+                        type={showTokenText ? "text" : "password"}
+                        value={twitchTokenInput}
+                        onChange={e => setTwitchTokenInput(e.target.value)}
+                        placeholder="Paste Twitch auth-token here..."
+                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs text-white font-mono outline-none"
+                      />
+                      <button 
+                        onClick={() => setShowTokenText(!showTokenText)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white"
+                        title={showTokenText ? "Hide token" : "Show token"}
+                      >
+                        {showTokenText ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        onClick={handleSaveTwitchToken}
+                        disabled={isSavingToken}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 active:scale-95 transition-all text-white shrink-0 shadow-md cursor-pointer disabled:opacity-50"
+                      >
+                        {isSavingToken ? '...' : 'Save'}
+                      </button>
+                    </div>
+
+                    {showTwitchHelp && (
+                      <div className="text-[10px] text-gray-300 p-2.5 rounded-lg bg-black/70 border border-purple-500/30 leading-relaxed mt-1">
+                        💡 <strong>How to get your Twitch Auth Token:</strong><br/>
+                        1. Open <span className="text-purple-300 font-mono">twitch.tv</span> in your browser where you're logged in with a sub.<br/>
+                        2. Press <kbd className="px-1 py-0.5 bg-white/10 rounded font-mono">F12</kbd> → Click <strong>Application</strong> tab (or <strong>Storage</strong> in Firefox).<br/>
+                        3. Under <strong>Cookies</strong>, click <span className="text-purple-300 font-mono">https://www.twitch.tv</span>.<br/>
+                        4. Copy the value of <strong className="text-white font-mono">auth-token</strong> and paste it above!
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions: Import cookies.txt & Clear */}
+                  <div className="grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => handleSyncBrowserCookies(browserCookies === 'none' ? 'chrome' : browserCookies)}
-                      disabled={isSyncingCookies}
-                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white shrink-0 border border-white/10"
+                      onClick={handleImportCookiesFile}
+                      disabled={isImportingCookies}
+                      className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm disabled:opacity-50"
+                      title="Import any cookies.txt file exported from browser"
                     >
-                      {isSyncingCookies ? '...' : 'Sync'}
+                      <FileText size={13} className="text-blue-400" />
+                      <span>{isImportingCookies ? 'Importing...' : 'Import cookies.txt'}</span>
                     </button>
+
+                    <button
+                      onClick={handleClearCookies}
+                      disabled={!cookieStatus?.hasCookies && !twitchTokenInput}
+                      className="p-2 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-30"
+                      title="Clear all stored cookies & credentials"
+                    >
+                      <Trash2 size={13} />
+                      <span>Clear Cookies</span>
+                    </button>
+                  </div>
+
+                  {/* Browser Sync */}
+                  <div className="flex flex-col gap-1 pt-1 border-t border-white/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-gray-400">Direct Browser Sync:</span>
+                      {cookieSyncStatus && (
+                        <span className="text-[10px] font-mono text-amber-300 truncate max-w-[160px]">{cookieSyncStatus}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <CustomDropdown 
+                          value={browserCookies}
+                          options={browserOptions}
+                          onChange={setBrowserCookies}
+                          theme={theme}
+                          variant="glass-dark"
+                          size="sm"
+                          accentColor={accentColor}
+                          className="w-full"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleSyncBrowserCookies(browserCookies === 'none' ? 'chrome' : browserCookies)}
+                        disabled={isSyncingCookies}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white shrink-0 border border-white/10 cursor-pointer disabled:opacity-50"
+                      >
+                        {isSyncingCookies ? '...' : 'Sync'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* 7. Codec Selection */}
+                {/* 6. Codec Selection */}
                 <div className="flex items-center justify-between mx-2">
                   <span className="text-[14px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Video Codec Priority:</span>
                   <CustomDropdown 
@@ -2259,15 +2460,32 @@ function SettingsView({
         </div>
 
         {/* Change Folder Action */}
-        <div className="pt-2">
-          <button 
-            onClick={changeDownloadFolder} 
-            className="w-full py-2.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-white/10 hover:bg-white/5 transition-all"
-            style={{ color: theme.textMain }}
-          >
-            <FolderOpen size={16} style={{ color: accentColor }} />
-            <span>Change Default Download Folder</span>
-          </button>
+        <div className="pt-2 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Default Save Folder:</span>
+            {downloadFolder && (
+              <button
+                onClick={() => openDownloadFolder(downloadFolder)}
+                className="text-[11px] text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <FolderOpen size={12} />
+                <span>Open in Explorer</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 px-3 py-2 rounded-xl bg-black/40 border border-white/5 text-[11px] font-mono text-gray-300 truncate" title={downloadFolder || 'Downloads (Default)'}>
+              {downloadFolder || 'Downloads (Default)'}
+            </div>
+            <button 
+              onClick={changeDownloadFolder} 
+              className="py-2 px-3.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-white/10 hover:bg-white/10 transition-all shrink-0 cursor-pointer"
+              style={{ color: theme.textMain }}
+            >
+              <FolderOpen size={14} style={{ color: accentColor }} />
+              <span>Browse</span>
+            </button>
+          </div>
         </div>
       </div>
 

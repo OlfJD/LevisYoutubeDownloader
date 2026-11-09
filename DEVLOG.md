@@ -66,7 +66,26 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ---
 
+## 📋 Planned Features & Roadmap (TODO)
+
+- [x] **Live Stream DVR & Studio Custom Destination Folder Picker**:
+  - Added dedicated output directory picker and browse button directly inside the **Live Stream DVR Studio** view and Settings.
+  - Real-time directory display with 1-click "Open in Windows Explorer" and "Browse/Change" dialog.
+  - Persisted destination directory synchronization across all engine recording processes.
+
+---
+
 ## 📜 Release History & Changelog
+
+### **v1.1.0-dev** (2026-11-04) - *Security & Bug-Fix Pass*
+- **Local API no longer exposed to websites or the LAN (`app_backend/backend.py`)**:
+  - The Flask server listens on `0.0.0.0` (needed for Wi-Fi Share) and sent `Access-Control-Allow-Origin: *`, so **any website open in the browser** could read `/api/settings` (including the Twitch auth token) or the logs, or start downloads. **Any device on the network** could call every endpoint, including `/api/close` and cookie import/clear.
+  - Removed the wildcard CORS header (the UI is same-origin and doesn't need it).
+  - New `before_request` guard: the API only answers loopback clients. LAN clients may only reach `/api/download_file/…`, and only for files explicitly shared through `/api/share_info`. Before, every file in the download folder was downloadable, which could include `youtube.com_cookies.txt` in Downloads.
+  - Requests whose `Host` header isn't an IP or `localhost` are rejected, which blocks DNS-rebinding pages.
+- **Input hardening**: URLs starting with `-` are rejected (yt-dlp would parse them as options such as `--exec`). Custom file names are stripped of Windows-illegal characters and `%`, so names like `My video: part 1?` no longer make the download fail.
+- **GIF/WebP meme captions with `%` failed to render**: drawtext's `%{…}` expansion is now disabled (`expansion=none`) and backslashes are stripped.
+- **Playlist progress label stuck on "Video 1 of N"**: the log scan used the first match instead of the newest one (same for the destination filename).
 
 ### **v1.1.0-dev** (2026-09-30) - *The Master Media Engine, Live Stream DVR & Spatial Studio Update*
 - **3-Screen Spatial Navigation Architecture**:
@@ -89,11 +108,21 @@ All future releases and updates for this project **MUST** adhere to the **Semant
   - Generates instant high-contrast QR code via `qrcode` for camera scanning over LAN (`http://<ip>:54321/api/download_file/<filename>`), downloading directly to mobile without cables.
 - **Smart-Blur Background Margin Filters (Aspect Ratio Padding)**:
   - Added `16:9 (Smart Blur Background)` and `9:16 (Smart Blur Background)` in GIF & Video studio using two-pass FFmpeg boxblur padding filter graphs.
-- **Smart Clipboard Link Auto-Detector**:
-  - Real-time clipboard watcher displaying an animated floating glass pill when media links (YouTube, Twitch, TikTok, Twitter/X) are copied to Windows clipboard.
+- **Twitch & Live Stream Robust Fallback & Smart Naming**:
+  - Defaults output filenames to `Channelname - Title of the stream` (`%(uploader,channel,creator,uploader_id)s - %(title)s.%(ext)s`) for Twitch and YouTube live streams.
+  - Automatically recovers and switches to `--no-live-from-start` if a live stream has no VOD archive available.
 - **Obsidian Glass Custom Dropdowns**:
   - Replaced standard white Windows OS `<select>` / `<option>` menus with custom tactile dark Obsidian Glass dropdown components (`CustomDropdown.tsx`).
   - Added support for keyboard accessibility, smooth framer-motion micro-animations, custom badge chips, and click-outside dismissal.
+- **WebView2 Silent Permission Auto-Grant**:
+  - Intercepts Microsoft WebView2 `PermissionRequested` events on Windows to silently auto-grant `ClipboardRead`, clipboard write, and media permissions. Eliminates the browser permission dialog ("wants to See text and images copied to the clipboard") when pasting links.
+- **Twitch Subscriber-Only VOD & Universal Authentication Subsystem**:
+  - Direct 1-click support for **Twitch Subscriber-Only VODs** and archived live streams via Twitch `auth-token` and Netscape cookie injection.
+  - Added dedicated **Twitch Auth Token** configuration input in Settings with token visibility toggle and step-by-step token extraction helper.
+  - Added native **Import `cookies.txt`** file dialog via Windows file selector (`/api/import_cookies`), supporting cookies from browser extensions (e.g., *Get cookies.txt LOCALLY*).
+  - Enhanced multi-platform cookie sync (`/api/sync_cookies`) with live status feedback, active cookie domain detection (Twitch, YouTube, Kick), and 1-click cookie reset.
+  - Fixed false-positive "Process Finished Successfully!" bug when downloads failed on subscriber-only or age-restricted content.
+  - Implemented intelligent error diagnosis that flags subscriber-only and login-restricted streams, providing instant action buttons to navigate directly to Cookie Settings.
 - **Universal Downloader Power Settings**:
   - SponsorBlock integration, 1-click browser cookie synchronization (Chrome, Firefox, Brave, Edge, Opera, Vivaldi), video codec selector, and metadata embedding.
 
