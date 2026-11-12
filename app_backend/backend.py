@@ -242,6 +242,89 @@ def initialize_assets():
         except Exception as e:
             app_logs.append(f"Error downloading FFmpeg: {e}")
 
+BROWSER_LABELS = {"chrome": "Chrome", "edge": "Edge", "brave": "Brave", "firefox": "Firefox",
+                  "vivaldi": "Vivaldi", "opera": "Opera", "operagx": "Opera GX"}
+YT_LOGIN_COOKIES = {"SID", "__Secure-1PSID", "__Secure-3PSID", "LOGIN_INFO", "SAPISID"}
+
+
+def cookie_rows(content):
+    """Netscape cookies.txt rows as column lists (HttpOnly rows are prefixed with #HttpOnly_)."""
+    rows = []
+    for line in content.splitlines():
+        line = line[len("#HttpOnly_"):] if line.startswith("#HttpOnly_") else line
+        if not line.strip() or line.startswith("#"):
+            continue
+        cols = line.split("\t")
+        if len(cols) >= 7:
+            rows.append(cols)
+    return rows
+
+
+def is_youtube_domain(domain):
+    """youtube.com and its subdomains only. google.com (the account itself) is deliberately excluded."""
+    d = domain[len("#HttpOnly_"):] if domain.startswith("#HttpOnly_") else domain
+    return re.search(r'(^|\.)youtube\.com$', d, re.I) is not None
+
+
+def has_youtube_login(content):
+    return any(is_youtube_domain(c[0]) and c[5] in YT_LOGIN_COOKIES for c in cookie_rows(content))
+
+
+def merge_youtube_cookies(browser_dump):
+    """Keeps only youtube.com rows from a full browser dump and merges them into the stored file:
+    its old YouTube rows are replaced, anything else already in it (e.g. the Twitch token) is kept."""
+    def yt_row(line):
+        cols = line.split("\t")
+        return len(cols) >= 7 and is_youtube_domain(cols[0])
+
+    yt = [l for l in browser_dump.splitlines() if yt_row(l)]
+    kept = []
+    if os.path.exists(COOKIES_STORED):
+        with open(COOKIES_STORED, 'r', encoding='utf-8', errors='ignore') as f:
+            kept = [l for l in f.read().splitlines()
+                    if l.strip() and not l.startswith("# ") and l != "# Netscape HTTP Cookie File" and not yt_row(l)]
+    return yt, "\n".join(["# Netscape HTTP Cookie File"] + kept + yt) + "\n"
+
+
+def browser_spec(key):
+    """yt-dlp --cookies-from-browser value. yt-dlp only knows "Opera Stable", so Opera GX gets an explicit profile path."""
+    if key not in BROWSER_LABELS:
+        return None
+    opera_dir = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Opera Software")
+    # "Opera" picked but only Opera GX installed: use GX instead of failing
+    if key == "opera" and not os.path.isdir(os.path.join(opera_dir, "Opera Stable")) \
+            and os.path.isdir(os.path.join(opera_dir, "Opera GX Stable")):
+        key = "operagx"
+    if key != "operagx":
+        return key
+    # yt-dlp's "opera" mode doesn't support profiles and only knows "Opera Stable". GX is Chromium, so use
+    # chrome mode with the profile path: it reads <profile>/Network/Cookies and the key from the parent's Local State.
+    return "chrome:" + os.path.join(opera_dir, "Opera GX Stable", "Default")
+
+
+def cookie_args(browser_cookies):
+    """Stored cookies.txt wins (it is what Sync writes); live browser extraction is the fallback."""
+    if os.path.exists(COOKIES_STORED) and os.path.getsize(COOKIES_STORED) > 0:
+        return ["--cookies", COOKIES_STORED]
+    spec = browser_spec(browser_cookies) if browser_cookies and browser_cookies != "none" else None
+    return ["--cookies-from-browser", spec] if spec else []
+
+
+_js_runtime = []
+_js_runtime_checked = False
+
+
+def js_runtime_args():
+    """YouTube needs a JS runtime for signature challenges; yt-dlp only auto-enables deno."""
+    global _js_runtime, _js_runtime_checked
+    if not _js_runtime_checked:
+        _js_runtime_checked = True
+        node = shutil.which("node")
+        if node and not shutil.which("deno"):
+            _js_runtime = ["--js-runtimes", f"node:{node}"]
+    return list(_js_runtime)
+
+
 def parse_cookies_file_info(cookie_path=COOKIES_STORED):
     """Inspects cookie file and returns detailed metadata about stored tokens/domains."""
     info = {
@@ -265,8 +348,9 @@ def parse_cookies_file_info(cookie_path=COOKIES_STORED):
                     info["lineCount"] = len(lines)
                     if 'twitch.tv' in content or 'auth-token' in content:
                         info["hasTwitch"] = True
-                    if 'youtube.com' in content or 'SSID' in content or 'LOGIN_INFO' in content or 'SAPISID' in content:
-                        info["hasYouTube"] = True
+                    # Only a signed-in session counts: logged-out exports still contain visitor youtube.com cookies
+                    info["hasYouTube"] = has_youtube_login(content)
+                    info["youTubeGuestOnly"] = not info["hasYouTube"] and 'youtube.com' in content
                     if 'kick.com' in content:
                         info["hasKick"] = True
                     
@@ -728,32 +812,74 @@ def api_clear_cookies():
 @app.route('/api/sync_cookies', methods=['POST'])
 def api_sync_cookies():
     data = request.json or {}
-    browser = data.get('browser', 'chrome').lower()
-    
+    browser = str(data.get('browser', 'chrome')).lower()
+    spec = browser_spec(browser)
+    label = BROWSER_LABELS.get(browser, browser)
+    if not spec:
+        return jsonify({"success": False, "error": f"Unknown browser: {browser}", "status": get_cookie_status_dict()})
+
+    # Write to a temp file first: an existing cookies.txt must not make a failed sync look successful
+    tmp = os.path.join(TOOLS_DIR, f"_cookie_sync_{int(time.time())}.txt")
     try:
-        cmd = [
-            YTDLP_EXE,
-            "--cookies-from-browser", browser,
-            "--cookies", COOKIES_STORED,
-            "--no-download",
-            "--playlist-items", "0",
-            "https://www.youtube.com",
-            "https://www.twitch.tv"
-        ]
-        app_logs.append(f"Synchronizing session cookies from {browser.capitalize()} for YouTube and Twitch...")
-        ret = run_process(cmd)
-        
-        status = get_cookie_status_dict()
-        if os.path.exists(COOKIES_STORED) and os.path.getsize(COOKIES_STORED) > 0:
-            app_logs.append(f"Successfully synchronized cookies from {browser.capitalize()}! ({status.get('summary', '')})")
-            return jsonify({"success": True, "message": f"Cookies synchronized from {browser.capitalize()}!", "status": status})
-        else:
-            err_msg = f"Could not extract cookies from {browser.capitalize()}. If the browser is open, please close it or click 'Import cookies.txt' / paste your Twitch Auth Token."
+        app_logs.append(f"Synchronizing session cookies from {label}...")
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        # No URL: yt-dlp still loads the browser jar and writes it to --cookies on exit
+        proc = subprocess.run([YTDLP_EXE, "--cookies-from-browser", spec, "--cookies", tmp],
+                              capture_output=True, text=True, encoding='utf-8', errors='ignore',
+                              startupinfo=startupinfo, timeout=120)
+        out = (proc.stdout or '') + (proc.stderr or '')
+        # yt-dlp can only dump the whole jar; read it, delete it immediately, keep only youtube.com
+        dump = ''
+        if os.path.exists(tmp):
+            with open(tmp, 'r', encoding='utf-8', errors='ignore') as f:
+                dump = f.read()
+            os.remove(tmp)
+        any_cookies = bool(cookie_rows(dump))
+        yt, content = merge_youtube_cookies(dump)
+        dump = ''
+        rows = cookie_rows("\n".join(yt))
+
+        if any_cookies and not rows:
+            err_msg = f"{label} has no youtube.com cookies. Open youtube.com in {label}, sign in, close it and sync again."
             app_logs.append(f"⚠️ Cookie Sync Note: {err_msg}")
-            return jsonify({"success": False, "error": err_msg, "status": status})
+            return jsonify({"success": False, "error": err_msg, "status": get_cookie_status_dict()})
+
+        if not rows:
+            low = out.lower()
+            if 'could not copy' in low or 'database is locked' in low:
+                err_msg = f"{label} is running and has its cookie database locked. Close {label} completely (check the tray), click Sync again, then reopen it."
+            elif 'could not find' in low or 'failed to find' in low:
+                err_msg = f"No {label} profile found on this PC."
+            elif 'decrypt' in low:
+                err_msg = f"{label} encrypts its cookies in a way yt-dlp cannot read. Use 'Import cookies.txt' instead."
+            else:
+                err_msg = f"Could not read cookies from {label}."
+            app_logs.append(f"⚠️ Cookie Sync Note: {err_msg}")
+            # yt-dlp's own error lines (no cookie values are ever printed by yt-dlp)
+            for line in [l for l in out.splitlines() if l.strip().startswith(("ERROR", "WARNING"))][-3:]:
+                app_logs.append(f"   yt-dlp: {line.strip()}")
+            return jsonify({"success": False, "error": err_msg, "status": get_cookie_status_dict()})
+
+        with open(COOKIES_STORED, 'w', encoding='utf-8') as f:
+            f.write(content)
+        status = get_cookie_status_dict()
+        if status.get("hasYouTube"):
+            msg = f"Synced {len(rows)} youtube.com cookies from {label} (YouTube login found). Nothing else was saved."
+        else:
+            msg = f"Synced {len(rows)} youtube.com cookies from {label}, but no YouTube login was found. Sign in to YouTube in {label} and sync again."
+        app_logs.append(msg)
+        return jsonify({"success": True, "message": msg, "youTubeLoggedIn": bool(status.get("hasYouTube")), "status": status})
     except Exception as e:
         app_logs.append(f"Cookie sync error: {e}")
         return jsonify({"success": False, "error": str(e), "status": get_cookie_status_dict()})
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 # --- LOCAL WI-FI SHARE & SERVING ENDPOINTS ---
 @app.route('/api/share_info', methods=['GET'])
@@ -850,10 +976,7 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
 
     while live_recording_state.get("is_recording", False):
         cmd = [YTDLP_EXE]
-        if browser_cookies and browser_cookies != 'none':
-            cmd.extend(["--cookies-from-browser", browser_cookies])
-        elif os.path.exists(COOKIES_STORED):
-            cmd.extend(["--cookies", COOKIES_STORED])
+        cmd.extend(js_runtime_args() + cookie_args(browser_cookies))
 
         if current_live_from_start:
             cmd.append("--live-from-start")
@@ -1256,10 +1379,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         
         # 1. Download video stream with yt-dlp
         cmd = [YTDLP_EXE]
-        if browser_cookies and browser_cookies != 'none':
-            cmd.extend(["--cookies-from-browser", browser_cookies])
-        elif os.path.exists(COOKIES_STORED):
-            cmd.extend(["--cookies", COOKIES_STORED])
+        cmd.extend(js_runtime_args() + cookie_args(browser_cookies))
             
         if sponsor_block:
             cmd.extend(["--sponsorblock-remove", "sponsor,intro,outro,selfpromo"])
@@ -1355,10 +1475,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             used_aria = True
             app_logs.append("⚡ Turbo Acceleration Active: 16x Multi-Thread Engine enabled.")
             
-        if browser_cookies and browser_cookies != 'none':
-            cmd.extend(["--cookies-from-browser", browser_cookies])
-        elif os.path.exists(COOKIES_STORED):
-            cmd.extend(["--cookies", COOKIES_STORED])
+        cmd.extend(js_runtime_args() + cookie_args(browser_cookies))
             
         if sponsor_block:
             cmd.extend(["--sponsorblock-remove", "sponsor,intro,outro,selfpromo"])

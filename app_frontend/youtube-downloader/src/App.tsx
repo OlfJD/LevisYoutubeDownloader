@@ -2051,7 +2051,7 @@ function SettingsView({
       });
       const data = await res.json();
       if (data.success) {
-        setCookieSyncStatus(`Success! Cookies synced.`);
+        setCookieSyncStatus(data.youTubeLoggedIn ? 'Synced (YouTube signed in)' : 'Synced, but YouTube not signed in');
         setBrowserCookies(browser);
         if (fetchCookieStatus) fetchCookieStatus();
       } else {
@@ -2141,6 +2141,7 @@ function SettingsView({
     { value: 'brave', label: 'Brave Browser' },
     { value: 'edge', label: 'Microsoft Edge' },
     { value: 'opera', label: 'Opera' },
+    { value: 'operagx', label: 'Opera GX' },
     { value: 'vivaldi', label: 'Vivaldi' },
   ];
 

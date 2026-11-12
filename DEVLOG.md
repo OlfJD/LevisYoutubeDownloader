@@ -156,3 +156,12 @@ All future releases and updates for this project **MUST** adhere to the **Semant
   - Full YouTube audio/video downloading engine with `yt-dlp` and `ffmpeg`.
   - Translucent Obsidian dark UI with React and Tailwind CSS.
   - Playlist batch support, custom filename pre-naming, and download history tracking.
+
+
+### Opera GX Cookie Sync & Age-Restricted YouTube Fix (2026-11-12)
+- **Opera GX sync**: yt-dlp's built-in `opera` only reads `Opera Stable`; the new `operagx` option passes `chrome:%APPDATA%\Opera Software\Opera GX Stable\Default` (yt-dlp's `opera` mode ignores profile paths; GX is Chromium, and chrome mode reads the key from the parent folder's `Local State`). Picking plain "Opera" falls back to GX when only GX is installed.
+- **Sync writes the stored cookies.txt** and is validated from a temp file, so a failed sync no longer reports success just because an older cookies.txt exists. Locked-database (browser still open), missing-profile and decryption failures get specific messages.
+- **YouTube status is now honest**: "signed in" requires a login cookie (`SID`, `__Secure-1PSID`/`3PSID`, `LOGIN_INFO`, `SAPISID`). A logged-out export with only visitor cookies (`VISITOR_INFO1_LIVE`, `YSC`...) shows "not signed in"; that was why age-restricted videos still failed with "Sign in to confirm your age".
+- **Stored cookies.txt takes precedence** over live `--cookies-from-browser` (Chromium browsers lock their database while open, so live extraction usually fails).
+- **JS runtime**: when `node` is on PATH (and no `deno`), yt-dlp gets `--js-runtimes node:<path>`; YouTube extraction without one is deprecated and drops formats.
+- **Sync saves youtube.com cookies only.** yt-dlp can only dump a browser's whole cookie jar, so the dump goes to a temp file, gets filtered to `youtube.com` and its subdomains (never `google.com`, look-alike domains or anything else), and is deleted right away. Existing non-YouTube rows in the stored file (e.g. the Twitch token) are kept; old YouTube rows are replaced.

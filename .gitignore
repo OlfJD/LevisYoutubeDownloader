@@ -34,3 +34,9 @@ env/
 *.log
 .DS_Store
 Thumbs.db
+
+# Browser cookies / auth tokens: never commit
+*cookies*.txt
+*.cookies
+_cookie_sync_*
+
