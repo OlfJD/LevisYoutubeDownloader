@@ -1,10 +1,10 @@
 @echo off
 setlocal
-title Levi's Media Engine Pro - Builder
+title Levi's Downloader - Builder
 cd /d "%~dp0"
 
 echo ===================================================
-echo   Levi's Media Engine Pro - Standalone Build Script
+echo   Levi's Downloader - Standalone Build Script
 echo ===================================================
 echo.
 

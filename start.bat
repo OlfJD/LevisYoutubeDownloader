@@ -1,10 +1,10 @@
 @echo off
 setlocal
-title Levi's Media Engine Pro - Dev Runner
+title Levi's Downloader - Dev Runner
 cd /d "%~dp0"
 
 echo ===================================================
-echo   Levi's Media Engine Pro (Dev Version)
+echo   Levi's Downloader (Dev Version)
 echo   Universal Downloader ^& Master Video-to-GIF Studio
 echo ===================================================
 echo.
@@ -18,7 +18,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [*] Launching Levi's Downloader Pro Backend...
+echo [*] Launching Levi's Downloader Backend...
 cd app_backend
 python backend.py
 

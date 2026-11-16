@@ -99,7 +99,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
     >
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold tracking-wider uppercase opacity-40" style={{ color: theme.textSecondary }}>
-          Levi's Media Downloader Pro · Live DVR & GIF Studio
+          Levi's Downloader · Live DVR & GIF Studio
         </span>
       </div>
       <div className="flex items-center gap-1">
@@ -2210,7 +2210,7 @@ function SettingsView({
               )}
             </div>
             <div className="text-[11px] font-mono text-center text-gray-500 pt-3 mt-3 border-t border-white/[0.06]">
-              Levi's YouTube Downloader Pro · v1.1.0-dev
+              Levi's Downloader · v1.1.0-dev
             </div>
           </>
         )}
