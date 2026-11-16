@@ -78,6 +78,24 @@ live_process = None
 download_queue = []
 queue_worker_active = False
 
+# Set by /api/stop; cleared when a new job starts. run_process won't start a process while it is set.
+cancel_event = threading.Event()
+
+
+def kill_process_tree(proc):
+    """terminate() on Windows only kills yt-dlp itself; its ffmpeg/aria2c children would keep running."""
+    try:
+        if os.name == 'nt':
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=10)
+        else:
+            proc.terminate()
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
 def get_installed_ytdlp_version():
     try:
         startupinfo = None
@@ -695,14 +713,13 @@ def probe_media_file(target):
 
 @app.route('/api/stop', methods=['POST'])
 def api_stop():
-    global current_process
-    if current_process:
-        try:
-            current_process.terminate()
-        except:
-            pass
+    # Flag first so run_download doesn't fall back to another downloader or start the conversion step
+    cancel_event.set()
+    proc = current_process
+    if proc:
+        kill_process_tree(proc)
+        # Deliberately no "Process Finished Successfully!": a cancelled job is not a finished download
         app_logs.append("Process stopped by user.")
-        app_logs.append("Process Finished Successfully!")
         return jsonify({"success": True})
     return jsonify({"success": False})
 
@@ -731,7 +748,8 @@ def api_check_updates():
 def api_update():
     global app_logs
     app_logs.clear()
-    
+    cancel_event.clear()
+
     def run_update_thread():
         app_logs.append("Starting engine updater pipeline...")
         cmd = [YTDLP_EXE, "-U"]
@@ -993,7 +1011,8 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
             fmt = "bestvideo+bestaudio/best"
 
         cmd.extend([
-            "--print", "filename",
+            # before_dl: a plain `--print filename` implies --simulate, so nothing would be recorded
+            "--print", "before_dl:filename",
             "-P", target_dir,
             "-o", output_template,
             "--no-part",
@@ -1100,18 +1119,10 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
 def api_stop_live():
     global live_process, live_recording_state
     if live_process:
-        try:
-            if live_process.stdin:
-                try:
-                    live_process.stdin.write("q\n")
-                    live_process.stdin.flush()
-                except:
-                    pass
-            time.sleep(1)
-            live_process.terminate()
-        except:
-            pass
+        # Set first so the recorder loop doesn't restart; the tree kill also ends yt-dlp's ffmpeg child,
+        # which would otherwise keep recording. --hls-use-mpegts keeps the file playable after a hard stop.
         live_recording_state["is_recording"] = False
+        kill_process_tree(live_process)
         app_logs.append("🔴 Live Stream recording stopped by user. Finalizing video container...")
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "No active recording"})
@@ -1184,7 +1195,7 @@ def process_queue_worker():
                     turbo_mode=item.get('turboMode', True),
                     split_chapters=item.get('splitChapters', False)
                 )
-                item['status'] = 'completed'
+                item['status'] = 'cancelled' if cancel_event.is_set() else 'completed'
             except Exception as e:
                 item['status'] = 'failed'
                 item['error'] = str(e)
@@ -1269,6 +1280,8 @@ def run_process(cmd_list):
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
     ret_code = 1
+    if cancel_event.is_set():
+        return ret_code
     try:
         current_process = subprocess.Popen(
             cmd_list,
@@ -1365,6 +1378,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                  turbo_mode=True, split_chapters=False):
     global app_logs
     app_logs.clear()
+    cancel_event.clear()
     check_cookies()
     app_logs.append(f"Universal Media Engine: Preparing download for {url}")
     
@@ -1391,7 +1405,9 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         cmd.extend(["--newline", "-o", temp_video, "--no-playlist", url])
         app_logs.append(f"Downloading source stream for {fmt.upper()} conversion...")
         run_process(cmd)
-        
+        if cancel_event.is_set():
+            return
+
         if not os.path.exists(temp_video):
             found_temp = None
             for f in os.listdir(download_dir):
@@ -1405,6 +1421,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                 return
 
         # 2. Convert to Target Format
+        conv_ret = 1
         out_ext = "gif" if fmt == 'gif' else "mp4" if fmt == 'loop_mp4' else "webp"
         final_filename = f"{custom_name}.{out_ext}" if custom_name else f"Levi_Master_Clip_{timestamp}.{out_ext}"
         final_output = os.path.join(download_dir, final_filename)
@@ -1418,7 +1435,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             if end_time and not ("--download-sections" in cmd):
                 conv_cmd.extend(["-to", end_time])
             conv_cmd.extend(["-i", temp_video, "-vf", filter_graph, final_output])
-            run_process(conv_cmd)
+            conv_ret = run_process(conv_cmd)
         elif fmt == 'loop_mp4':
             app_logs.append("Rendering Looping Video Clip with Audio...")
             conv_cmd = [FFMPEG_EXE, "-y"]
@@ -1432,7 +1449,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                 "-c:a", "aac", "-b:a", "320k",
                 "-movflags", "+faststart", final_output
             ])
-            run_process(conv_cmd)
+            conv_ret = run_process(conv_cmd)
         elif fmt == 'webp':
             app_logs.append("Rendering Animated 24-Bit WebP...")
             vf = []
@@ -1449,7 +1466,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                 elif scale == "480p": vf.append("scale=-1:480:flags=lanczos")
             vf_str = ",".join(vf) if vf else "null"
             conv_cmd = [FFMPEG_EXE, "-y", "-i", temp_video, "-vf", vf_str, "-vcodec", "libwebp", "-q:v", "90", "-loop", "0", "-an", final_output]
-            run_process(conv_cmd)
+            conv_ret = run_process(conv_cmd)
 
         try:
             if os.path.exists(temp_video):
@@ -1457,9 +1474,15 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         except:
             pass
 
-        if os.path.exists(final_output):
+        if cancel_event.is_set():
+            return
+        # The UI only stops waiting once it sees one of these two markers
+        if conv_ret == 0 and os.path.exists(final_output):
             add_history_entry(os.path.basename(final_output), fmt.upper())
             app_logs.append(f"Saved: {os.path.basename(final_output)}")
+            app_logs.append("Process Finished Successfully!")
+        else:
+            app_logs.append(f"CRITICAL ERROR: {fmt.upper()} conversion failed.")
 
     else:
         # Standard Universal Downloads: MP4, MP3, WAV, FLAC, WebM
@@ -1533,13 +1556,17 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         cmd.append(url)
         app_logs.append(f"Starting universal download...")
         ret = run_process(cmd)
-        
+        if cancel_event.is_set():
+            return
+
         # Transparent Auto-Fallback if aria2c was blocked by host
         if ret != 0 and used_aria:
             app_logs.append("Turbo accelerator encountered server connection throttle. Automatically retrying with native downloader...")
             cmd_fallback = [c for c in cmd if c not in ("--downloader", ARIA2C_EXE, "--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16")]
             ret = run_process(cmd_fallback)
-        
+            if cancel_event.is_set():
+                return
+
         # Error diagnostics & subscriber/auth check
         if ret != 0:
             recent_logs = "\n".join(app_logs[-30:]).lower()
@@ -1587,6 +1614,7 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
                       boomerang=False, crop="none", speed="1.0", meme_top="", meme_bottom="", max_file_size="none"):
     global app_logs
     app_logs.clear()
+    cancel_event.clear()
     app_logs.append(f"Local Studio: Converting '{os.path.basename(input_file)}' to {target_format.upper()}...")
     
     timestamp = int(time.time())
@@ -1635,13 +1663,16 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
             cmd.extend(["-vn", "-c:a", "flac", output_path])
             
     app_logs.append("Executing FFmpeg conversion...")
-    run_process(cmd)
-    
-    if os.path.exists(output_path):
+    ret = run_process(cmd)
+    if cancel_event.is_set():
+        return
+
+    if ret == 0 and os.path.exists(output_path):
         add_history_entry(os.path.basename(output_path), target_format.upper())
         app_logs.append(f"Master file saved: {output_path}")
-        
-    app_logs.append("Process Finished Successfully!")
+        app_logs.append("Process Finished Successfully!")
+    else:
+        app_logs.append(f"CRITICAL ERROR: {target_format.upper()} conversion failed.")
 
 # --- STARTUP ---
 def configure_webview_permissions():

@@ -1442,6 +1442,25 @@ function AdvancedGifMachineView({
   // Customizable Quality Settings Modal
   const [showQualityModal, setShowQualityModal] = useState(false);
 
+  // MainView's log poller isn't mounted here, so this view has to notice the end of its own render
+  useEffect(() => {
+    if (!isDownloading) return;
+    const interval = setInterval(() => {
+      fetch('/api/logs').then(r => r.json()).then(logs => {
+        if (!Array.isArray(logs)) return;
+        const isDone = logs.some(l => typeof l === 'string' && l.includes('Process Finished Successfully!'));
+        const isError = logs.some(l => typeof l === 'string' && l.includes('CRITICAL ERROR:'));
+        const isStopped = logs.some(l => typeof l === 'string' && l.includes('Process stopped by user.'));
+        if (isDone || isError || isStopped) {
+          setIsDownloading(false);
+          if (isError) setDownloadError(true);
+          fetchHistory();
+        }
+      }).catch(() => {});
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isDownloading]);
+
   // Pick local video from PC via Windows dialog
   const handlePickLocalVideo = async () => {
     try {
