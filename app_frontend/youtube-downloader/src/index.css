@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Corner system ("Soft"): the only radii the app uses, plus rounded-full for pills and dots.
+   chip: badges, small icon buttons, inner inputs · control: buttons, fields, dropdowns
+   card: cards inside a panel · panel: the big screen panels and modals */
+@theme {
+  --radius-chip: 8px;
+  --radius-control: 12px;
+  --radius-card: 16px;
+  --radius-panel: 24px;
+}
+
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;

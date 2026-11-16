@@ -15,12 +15,12 @@ export default function ThemeEditor({ theme, setTheme }: { theme: any, setTheme:
   };
 
   return (
-    <div className="fixed top-4 right-4 bg-black/40 p-4 rounded-xl backdrop-blur-md border border-white/10 shadow-2xl z-50 w-[240px] flex flex-col gap-2">
+    <div className="fixed top-4 right-4 bg-black/40 p-4 rounded-control backdrop-blur-md border border-white/10 shadow-2xl z-50 w-[240px] flex flex-col gap-2">
       <div className="flex justify-between items-center mb-2">
         <h3 className="text-white text-sm font-bold">Theme Editor</h3>
         <button 
           onClick={exportThemeToPython}
-          className="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded transition-colors"
+          className="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded-chip transition-colors"
           title="Export to Python"
         >
           Export
@@ -34,7 +34,7 @@ export default function ThemeEditor({ theme, setTheme }: { theme: any, setTheme:
               type="color" 
               value={val as string} 
               onChange={e => handleChange(key, e.target.value)} 
-              className="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent" 
+              className="w-6 h-6 rounded-chip cursor-pointer border-0 p-0 bg-transparent" 
             />
           </div>
         ))}

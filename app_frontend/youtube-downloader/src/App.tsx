@@ -16,6 +16,73 @@ import { motion, AnimatePresence } from 'motion/react';
 import QRCode from 'qrcode';
 import CustomDropdown, { DropdownOption } from './CustomDropdown';
 
+// -------------------------------------------------------------
+// Shared form pieces: one look for Settings, GIF studio and Live DVR
+// -------------------------------------------------------------
+const fieldClass = "w-full px-3 py-2 rounded-control bg-[#17171d] border border-white/[0.08] text-[13px] text-white outline-none placeholder:text-gray-500 focus:border-white/25 disabled:opacity-50 transition-colors";
+
+function Toggle({ on, onChange, accent, disabled, label }: { on: boolean; onChange: (v: boolean) => void; accent: string; disabled?: boolean; label: string }) {
+  return (
+    <button
+      type="button" role="switch" aria-checked={on} aria-label={label} title={label} disabled={disabled}
+      onClick={() => onChange(!on)}
+      className="relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{ backgroundColor: on ? accent : '#3a3b46' }}
+    >
+      <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all" style={{ left: on ? 22 : 2 }} />
+    </button>
+  );
+}
+
+function SettingRow({ icon, label, hint, children }: { icon?: React.ReactNode; label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-white/[0.06] last:border-b-0">
+      <div className="flex items-start gap-2.5 min-w-0">
+        {icon && <span className="mt-0.5 shrink-0 text-gray-400">{icon}</span>}
+        <div className="min-w-0">
+          <div className="text-[14px] font-semibold text-[#D9D9D9]">{label}</div>
+          {hint && <div className="text-[11px] text-gray-400 leading-snug">{hint}</div>}
+        </div>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+function FieldLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
+  return <label htmlFor={htmlFor} className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{children}</label>;
+}
+
+function PanelTitle({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-4 min-h-[32px]">
+      <h2 className="text-[20px] font-bold text-white whitespace-nowrap">{children}</h2>
+      {aside}
+    </div>
+  );
+}
+
+function FolderField({ folder, onChange, onOpen, accent, disabled }: { folder: string; onChange: () => void; onOpen?: (f: string) => void; accent: string; disabled?: boolean }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <FieldLabel>Save folder</FieldLabel>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0 px-3 py-2 rounded-control bg-[#17171d] border border-white/[0.08] text-[12px] font-mono text-gray-300 truncate" title={folder || 'Downloads (Default)'}>
+          {folder || 'Downloads (Default)'}
+        </div>
+        {folder && onOpen && (
+          <button onClick={() => onOpen(folder)} title="Open in Windows Explorer" className="p-2 rounded-control border border-white/[0.08] hover:bg-white/10 text-gray-300 hover:text-white transition-colors shrink-0">
+            <FolderOpen size={16} />
+          </button>
+        )}
+        <button onClick={onChange} disabled={disabled} className="px-3.5 py-2 rounded-control text-xs font-bold uppercase tracking-wider border border-white/[0.08] hover:bg-white/10 transition-colors shrink-0 text-[#D9D9D9] disabled:opacity-50" style={{ color: accent }}>
+          Change
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Native Drag-friendly Title Bar for Borderless Frame
 function CustomTitleBar({ theme }: { theme: any }) {
   const handleMinimize = () => {
@@ -39,7 +106,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
         {/* Minimize Button */}
         <button 
           onClick={handleMinimize}
-          className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10 active:scale-95"
+          className="w-8 h-8 rounded-chip flex items-center justify-center transition-colors hover:bg-white/10 active:scale-95"
           style={{ color: theme.textMain }}
           title="Minimize"
         >
@@ -48,7 +115,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
         {/* Close Button */}
         <button 
           onClick={handleClose}
-          className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-red-600/90 active:scale-95 hover:text-white"
+          className="w-8 h-8 rounded-chip flex items-center justify-center transition-colors hover:bg-red-600/90 active:scale-95 hover:text-white"
           style={{ color: theme.textMain }}
           title="Close"
         >
@@ -104,7 +171,7 @@ function ShareModal({
         initial={{ scale: 0.95, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 15 }}
-        className="w-full max-w-[460px] p-7 rounded-[32px] border border-white/10 shadow-2xl flex flex-col items-center gap-5 relative overflow-hidden"
+        className="w-full max-w-[460px] p-7 rounded-panel border border-white/10 shadow-2xl flex flex-col items-center gap-5 relative overflow-hidden"
         style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
       >
         <button 
@@ -124,19 +191,19 @@ function ShareModal({
           <p className="text-xs text-gray-400 mt-1">Scan with your iPhone or Android camera on the same Wi-Fi network to save directly to your phone.</p>
         </div>
 
-        <div className="p-3.5 bg-white rounded-2xl shadow-2xl flex items-center justify-center">
+        <div className="p-3.5 bg-white rounded-card shadow-2xl flex items-center justify-center">
           {qrDataUrl ? (
-            <img src={qrDataUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-lg" />
+            <img src={qrDataUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-chip" />
           ) : (
             <div className="w-[200px] h-[200px] flex items-center justify-center text-black font-semibold text-xs">Generating QR...</div>
           )}
         </div>
 
-        <div className="w-full flex items-center gap-2 p-2.5 rounded-xl bg-black/40 border border-white/5 text-xs text-white/80">
+        <div className="w-full flex items-center gap-2 p-2.5 rounded-control bg-black/40 border border-white/5 text-xs text-white/80">
           <span className="truncate flex-1 font-mono text-[11px] opacity-75">{file.shareUrl}</span>
           <button 
             onClick={handleCopy} 
-            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-white transition-all shrink-0 text-xs shadow-md"
+            className="px-3 py-1.5 rounded-chip bg-blue-600 hover:bg-blue-500 font-semibold text-white transition-all shrink-0 text-xs shadow-md"
           >
             {copied ? 'Copied!' : 'Copy Link'}
           </button>
@@ -442,6 +509,7 @@ export default function App() {
     btnDarkText: '#D9D9D9',
     panelOuter: '#292a34',
     panelInner: '#202128',
+    fieldBg: '#17171d',
     settingsBtnBg: '#292a33',
   };
 
@@ -461,7 +529,7 @@ export default function App() {
         {/* Dynamic Glowing Title */}
         <div className="relative mb-0 mt-2 flex flex-col items-center">
           <h1 
-            className="text-[58px] font-medium tracking-tight mb-1 select-none relative backdrop-blur-[2px] border py-1.5 px-10 rounded-3xl mix-blend-screen text-center transition-all duration-300"
+            className="text-[58px] font-medium tracking-tight mb-1 select-none relative backdrop-blur-[2px] border py-1.5 px-10 rounded-panel mix-blend-screen text-center transition-all duration-300"
             style={{ 
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
               borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -702,7 +770,7 @@ export default function App() {
         <div className="absolute bottom-6 w-full flex justify-between items-end pointer-events-none px-8 z-30">
           <button 
             onClick={() => setActiveView(activeView === 'settings' ? (activeSection === 'live_dvr' ? 'live_dvr' : activeSection === 'gif' ? 'gif_machine' : 'main') : 'settings')} 
-            className="pointer-events-auto rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group border border-white/5 shadow-lg"
+            className="pointer-events-auto rounded-card flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group border border-white/5 shadow-lg"
             style={{ 
               width: '60px', 
               height: '60px', 
@@ -718,7 +786,7 @@ export default function App() {
 
           <button 
             onClick={() => setActiveView(activeView === 'log' ? (activeSection === 'live_dvr' ? 'live_dvr' : activeSection === 'gif' ? 'gif_machine' : 'main') : 'log')} 
-            className="pointer-events-auto rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[18px] font-bold border border-white/5 shadow-lg"
+            className="pointer-events-auto rounded-card flex items-center justify-center transition-all active:translate-y-[4px] text-[18px] font-bold border border-white/5 shadow-lg"
             style={{ 
               width: '60px', 
               height: '60px', 
@@ -740,7 +808,7 @@ export default function App() {
               initial={{ opacity: 0, y: -20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className="absolute top-6 right-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-3xl border border-amber-500/20 shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[380px]"
+              className="absolute top-6 right-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-panel border border-amber-500/20 shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[380px]"
               style={{ backgroundColor: `${theme.panelOuter}f2`, color: theme.textMain, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 36px rgba(0,0,0,0.4)` }}
             >
               <div className="flex items-center justify-between gap-4 relative z-10">
@@ -758,7 +826,7 @@ export default function App() {
               </p>
               <button
                  onClick={() => { setShowUpdatePopup(false); handleUpdate(); }}
-                 className="mt-2 font-bold py-2.5 px-4 rounded-2xl transition-all active:translate-y-[2px] flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                 className="mt-2 font-bold py-2.5 px-4 rounded-card transition-all active:translate-y-[2px] flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
                  style={{ backgroundColor: theme.accent, color: '#ffffff', boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 rgba(0,0,0,0.3)` }}
               >
                 <RefreshCcw size={16} />
@@ -775,7 +843,7 @@ export default function App() {
               initial={{ opacity: 0, y: -20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.9 }}
-              className="absolute top-6 left-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-3xl border shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[340px]"
+              className="absolute top-6 left-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-panel border shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[340px]"
               style={{ 
                 backgroundColor: `${theme.panelOuter}f2`, 
                 color: theme.textMain, 
@@ -802,14 +870,14 @@ export default function App() {
                   <>
                     <button
                        onClick={() => { setDownloadError(false); setActiveView('settings'); }}
-                       className="flex-1 font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white shadow-md cursor-pointer"
+                       className="flex-1 font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white shadow-md cursor-pointer"
                     >
                       <Key size={13} />
                       <span>Cookie Settings</span>
                     </button>
                     <button
                        onClick={() => { setDownloadError(false); setActiveView('log'); }}
-                       className="font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
+                       className="font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
                     >
                       Logs
                     </button>
@@ -818,14 +886,14 @@ export default function App() {
                   <>
                     <button
                        onClick={() => { setDownloadError(false); handleUpdate(); }}
-                       className="flex-1 font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 text-white cursor-pointer"
+                       className="flex-1 font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 text-white cursor-pointer"
                        style={{ backgroundColor: theme.accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 rgba(0,0,0,0.3)` }}
                     >
                       Update Tool
                     </button>
                     <button
                        onClick={() => { setDownloadError(false); setActiveView('log'); }}
-                       className="font-bold py-2 px-3 rounded-xl transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
+                       className="font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
                     >
                       Logs
                     </button>
@@ -845,15 +913,15 @@ export default function App() {
             >
               <motion.div 
                 initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="w-full max-w-[550px] p-8 rounded-[30px] shadow-2xl flex flex-col gap-6 relative"
+                className="w-full max-w-[550px] p-8 rounded-panel shadow-2xl flex flex-col gap-6 relative"
                 style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
               >
                 <button onClick={() => setShowPlaylistPopup(false)} className="absolute top-6 right-6 hover:scale-110 active:scale-95"><X size={32} /></button>
                 <h3 className="text-[32px] font-medium text-center mt-2">Playlist Detected</h3>
                 <p className="text-[20px] text-center opacity-80 leading-relaxed px-2">You pasted a playlist link, but Playlist Mode is off. Would you like to turn it on to download the entire list?</p>
                 <div className="flex flex-col gap-4 mt-4">
-                  <button onClick={() => { handlePlaylistModeChange(true); setShowPlaylistPopup(false); }} className="py-4 rounded-xl font-bold text-[22px]" style={{ backgroundColor: theme.accent, color: '#fff', boxShadow: `0 4px 0 #99001b` }}>Turn On & Download All</button>
-                  <button onClick={() => setShowPlaylistPopup(false)} className="py-4 rounded-xl font-bold text-[22px] border-[3px]" style={{ borderColor: theme.btnDarkBorder, color: theme.textMain }}>No, just this video</button>
+                  <button onClick={() => { handlePlaylistModeChange(true); setShowPlaylistPopup(false); }} className="py-4 rounded-control font-bold text-[22px]" style={{ backgroundColor: theme.accent, color: '#fff', boxShadow: `0 4px 0 #99001b` }}>Turn On & Download All</button>
+                  <button onClick={() => setShowPlaylistPopup(false)} className="py-4 rounded-control font-bold text-[22px] border-[3px]" style={{ borderColor: theme.btnDarkBorder, color: theme.textMain }}>No, just this video</button>
                 </div>
               </motion.div>
             </motion.div>
@@ -948,7 +1016,7 @@ function MainView({
         onClick={handleSwitchToLiveDvr}
       >
         <button 
-          className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
+          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
           style={{ 
             backgroundColor: theme.btnDarkBg, 
             color: theme.liveAccent,
@@ -973,7 +1041,7 @@ function MainView({
         onClick={handleSwitchToGif}
       >
         <button 
-          className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
+          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
           style={{ 
             backgroundColor: theme.btnDarkBg, 
             color: theme.gifAccent,
@@ -995,7 +1063,7 @@ function MainView({
       <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8 my-auto">
         {/* Input Area with Inline Stop Button */}
         <div className="w-full relative flex gap-3 h-[46px] items-center">
-          <div className="flex-1 flex h-full rounded-[10px] overflow-hidden p-[2px] shadow-inner relative z-10 transition-all" style={{ backgroundColor: theme.inputBg }}>
+          <div className="flex-1 flex h-full rounded-control overflow-hidden p-[2px] shadow-inner relative z-10 transition-all" style={{ backgroundColor: theme.inputBg }}>
             <input 
               type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Twitter, Any Site)..." 
               className="flex-1 bg-transparent px-4 py-[3px] outline-none font-medium placeholder:opacity-60 text-[19px] disabled:opacity-50 tracking-wide" style={{ color: theme.inputText }}
@@ -1009,7 +1077,7 @@ function MainView({
 
           <AnimatePresence>
             {isDownloading && (
-              <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 140, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="h-full overflow-hidden shrink-0 rounded-[10px]">
+              <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 140, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="h-full overflow-hidden shrink-0 rounded-control">
                 <button 
                   onClick={handleStopProcess}
                   className="w-full h-full flex items-center justify-center gap-2 font-bold text-white uppercase tracking-widest bg-[#E33] hover:bg-[#ff4444] transition-colors shadow-inner"
@@ -1046,29 +1114,42 @@ function MainView({
           )}
         </AnimatePresence>
 
-        {/* ORIGINAL 3 DOWNLOAD BUTTONS (MP3, MP4, WAV) */}
-        <motion.div layout className="flex flex-col items-center gap-6">
-          <div className="flex gap-8">
-            <button onClick={() => startRealDownload('mp3')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP3</span></button>
-            <button onClick={() => startRealDownload('mp4')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download MP4</span></button>
+        {/* Download formats: one row, then the utility row */}
+        <motion.div layout className="flex flex-col items-center gap-7">
+          <div className="flex gap-6">
+            {(['mp3', 'mp4', 'wav'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => startRealDownload(f)}
+                disabled={isDownloading}
+                title={`Download as ${f.toUpperCase()}`}
+                className="w-[196px] disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] rounded-control flex items-center justify-center gap-3 transition-all active:translate-y-[4px] relative overflow-hidden group"
+                style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}
+              >
+                <Download size={22} strokeWidth={2.75} className="opacity-70" />
+                <span className="relative drop-shadow-md">{f}</span>
+              </button>
+            ))}
           </div>
-          <button onClick={() => startRealDownload('wav')} disabled={isDownloading} className="disabled:opacity-50 disabled:cursor-not-allowed font-extrabold uppercase tracking-widest text-[22px] py-[14px] px-12 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group" style={{ backgroundColor: theme.btnLightBg, color: theme.btnLightText, boxShadow: isDownloading ? 'none' : `inset 0 2px 0 rgba(255,255,255,0.4), 0 6px 0 ${theme.btnLightBorder}, 0 10px 15px rgba(0,0,0,0.2)` }}><span className="relative drop-shadow-md">Download WAV</span></button>
-        </motion.div>
 
-        {/* Bottom Action Buttons */}
-        <motion.div layout className="mt-16 flex flex-col items-center gap-[18px] w-[800px]">
-          <button onClick={() => setActiveView('prename')} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><PenLine size={20} /><span className="relative z-10">Prename File</span></button>
-          <div className="flex justify-center gap-[24px]">
-            <button onClick={changeDownloadFolder} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}><FolderOpen size={20} /><span className="relative z-10">Change Folder</span></button>
-            <button onClick={handleUpdate} className="w-[280px] gap-3 font-bold py-[12px] px-8 rounded-2xl flex items-center justify-center transition-all active:translate-y-[4px] text-[16px] uppercase tracking-widest whitespace-nowrap relative overflow-hidden group border border-white/5" style={{ backgroundColor: updateAvailable ? `${theme.accent}2b` : theme.btnDarkBg, borderColor: updateAvailable ? `${theme.accent}80` : 'rgba(255,255,255,0.05)', color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}>
+          <div className="flex justify-center gap-4">
+            {[
+              { key: 'rename', icon: <PenLine size={18} />, label: 'Rename', title: 'Set the output file name', onClick: () => setActiveView('prename') },
+              { key: 'folder', icon: <FolderOpen size={18} />, label: 'Folder', title: 'Change the download folder', onClick: changeDownloadFolder },
+            ].map(b => (
+              <button key={b.key} onClick={b.onClick} title={b.title} className="w-[180px] gap-2.5 font-bold py-[11px] rounded-control flex items-center justify-center transition-all active:translate-y-[4px] text-[15px] uppercase tracking-widest whitespace-nowrap border border-white/5" style={{ backgroundColor: theme.btnDarkBg, color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}>
+                {b.icon}<span>{b.label}</span>
+              </button>
+            ))}
+            <button onClick={handleUpdate} title={updateAvailable ? 'An update is available' : 'Check for updates'} className="w-[180px] gap-2.5 font-bold py-[11px] rounded-control flex items-center justify-center transition-all active:translate-y-[4px] text-[15px] uppercase tracking-widest whitespace-nowrap relative border" style={{ backgroundColor: updateAvailable ? `${theme.accent}2b` : theme.btnDarkBg, borderColor: updateAvailable ? `${theme.accent}80` : 'rgba(255,255,255,0.05)', color: theme.btnDarkText, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` }}>
               {updateAvailable && (
                 <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                 </span>
               )}
-              <RefreshCcw size={20} className={updateAvailable ? "text-amber-400 animate-spin-slow" : ""} />
-              <span className="relative z-10">{updateAvailable ? "Update Available" : "Update Tool"}</span>
+              <RefreshCcw size={18} className={updateAvailable ? "text-amber-400 animate-spin-slow" : ""} />
+              <span>{updateAvailable ? "Update!" : "Update"}</span>
             </button>
           </div>
         </motion.div>
@@ -1169,245 +1250,145 @@ function LiveDvrView({
   const isRecording = Boolean(recordingStatus?.is_recording);
 
   return (
-    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
-      
-      {/* Symmetrical Right Arrow to return to Downloader */}
-      <div 
+    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
+
+      {/* Right arrow back to the downloader */}
+      <div
         onClick={handleSwitchToMain}
         className="absolute -right-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40"
       >
-        <button 
-          className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
-          style={{ 
-            backgroundColor: theme.btnDarkBg, 
+        <button
+          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
+          style={{
+            backgroundColor: theme.btnDarkBg,
             color: theme.liveAccent,
             border: `1px solid rgba(59, 130, 246, 0.3)`,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)` 
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)`
           }}
           title="Back to Downloader"
         >
           <ChevronRight size={28} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" style={{ color: theme.liveAccent, filter: `drop-shadow(0 2px 8px ${theme.liveAccent}88)` }} />
-          <span 
-            className="text-[11px] font-black uppercase tracking-wider"
-            style={{ color: theme.liveAccent, textShadow: `0 2px 10px ${theme.liveAccent}aa` }}
-          >
+          <span className="text-[11px] font-black uppercase tracking-wider" style={{ color: theme.liveAccent, textShadow: `0 2px 10px ${theme.liveAccent}aa` }}>
             MAIN
           </span>
         </button>
       </div>
 
-      {/* Left Panel: Stream Link & DVR Options */}
-      <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[22px] font-bold text-white flex items-center gap-2">
-              <Radio size={22} className="text-blue-400" />
-              <span>1. Live Stream Source</span>
-            </h2>
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              Sapphire DVR
-            </span>
+      {/* Left: what to record */}
+      <div className="flex-1 rounded-card p-6 flex flex-col justify-between min-w-0" style={{ backgroundColor: theme.panelInner }}>
+        <div className="flex flex-col">
+          <PanelTitle>Stream</PanelTitle>
+
+          <div className="flex flex-col gap-1.5 mb-4">
+            <FieldLabel htmlFor="live-url">Live stream link</FieldLabel>
+            <input
+              id="live-url" type="text" value={liveUrl} onChange={e => setLiveUrl(e.target.value)} disabled={isRecording}
+              placeholder="YouTube Live or Twitch link" className={fieldClass}
+            />
           </div>
 
-          <div className="flex flex-col gap-3">
-            {/* Live Stream URL Input */}
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
-              <span className="text-xs font-bold text-gray-300">Paste Live Stream URL:</span>
-              <input 
-                type="text"
-                value={liveUrl}
-                onChange={e => setLiveUrl(e.target.value)}
-                disabled={isRecording}
-                placeholder="YouTube Live or Twitch Stream Link..."
-                className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-xs text-white outline-none disabled:opacity-50"
-              />
-            </div>
-
-            {/* Rewind & Start From Beginning (DVR Buffer) */}
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Repeat size={16} className="text-blue-400" />
-                  <span>Rewind to Broadcast Start</span>
-                </span>
-                <span className="text-[11px] text-gray-400">Captures entire live stream from 0:00 (`--live-from-start`)</span>
-              </div>
-              <button 
-                onClick={() => setLiveFromStart(!liveFromStart)}
-                disabled={isRecording}
-                className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4 shrink-0 disabled:opacity-50" 
-                style={{ backgroundColor: liveFromStart ? theme.liveAccent : '#555' }}
-              >
-                <div 
-                  className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
-                  style={{ 
-                    backgroundColor: liveFromStart ? theme.inputBg : '#a0a0a8', 
-                    left: liveFromStart ? 'auto' : '-3px', 
-                    right: liveFromStart ? '-3px' : 'auto' 
-                  }} 
-                />
-              </button>
-            </div>
-
-            {/* Custom File Name */}
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1">
-              <span className="text-xs font-bold text-gray-300">Custom Recording Name (Optional):</span>
-              <input 
-                type="text"
-                value={customLiveName}
-                onChange={e => setCustomLiveName(e.target.value)}
-                disabled={isRecording}
-                placeholder="Leave blank for: Channel - Title..."
-                className="w-full px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-xs text-white outline-none disabled:opacity-50"
-              />
-            </div>
-
-            {/* Stream Quality Selector & Save Folder Grid */}
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Stream Quality */}
-              <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
-                <span className="text-xs font-bold text-gray-300">Stream Quality:</span>
-                <CustomDropdown 
-                  value={liveQuality}
-                  options={[
-                    { value: 'Best', label: 'Best (Source)', badge: 'Max' },
-                    { value: '1080p', label: '1080p FHD' },
-                    { value: '720p', label: '720p HD' },
-                    { value: '480p', label: '480p SD' },
-                  ]}
-                  onChange={setLiveQuality}
-                  theme={theme}
-                  variant="tactile-light"
-                  size="sm"
-                  accentColor={theme.liveAccent}
-                />
-              </div>
-
-              {/* Destination Save Folder */}
-              <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col justify-between gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-300 flex items-center gap-1">
-                    <FolderOpen size={13} className="text-blue-400" />
-                    <span>Save Folder:</span>
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {downloadFolder && (
-                      <button
-                        onClick={() => openDownloadFolder(downloadFolder)}
-                        className="p-1 rounded bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-all active:scale-95 cursor-pointer"
-                        title="Open in Windows Explorer"
-                      >
-                        <FolderOpen size={11} />
-                      </button>
-                    )}
-                    <button
-                      onClick={changeDownloadFolder}
-                      disabled={isRecording}
-                      className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                    >
-                      Change
-                    </button>
-                  </div>
-                </div>
-                <div className="text-[10px] font-mono text-gray-400 truncate bg-black/40 px-2 py-1 rounded border border-white/5" title={downloadFolder || 'Downloads (Default)'}>
-                  {downloadFolder ? (downloadFolder.length > 26 ? '...' + downloadFolder.slice(-23) : downloadFolder) : 'Downloads (Default)'}
-                </div>
-              </div>
-            </div>
+          <div className="flex flex-col gap-1.5 mb-1">
+            <FieldLabel htmlFor="live-name">File name</FieldLabel>
+            <input
+              id="live-name" type="text" value={customLiveName} onChange={e => setCustomLiveName(e.target.value)} disabled={isRecording}
+              placeholder="Optional, default is Channel - Title" className={fieldClass}
+            />
           </div>
+
+          <SettingRow label="Quality">
+            <CustomDropdown
+              value={liveQuality}
+              options={[
+                { value: 'Best', label: 'Best (source)' },
+                { value: '1080p', label: '1080p' },
+                { value: '720p', label: '720p' },
+                { value: '480p', label: '480p' },
+              ]}
+              onChange={setLiveQuality} theme={theme} size="sm" accentColor={theme.liveAccent} minWidth={150}
+            />
+          </SettingRow>
+          <SettingRow icon={<Repeat size={16} />} label="Record from the start" hint="Rewinds to when the broadcast began, if the site allows it">
+            <Toggle on={liveFromStart} onChange={setLiveFromStart} accent={theme.liveAccent} disabled={isRecording} label="Record from the start" />
+          </SettingRow>
         </div>
 
-        <div className="text-xs font-mono opacity-60">
-          Target Format: <strong className="text-blue-400 font-bold">MPEG-TS Remuxed MP4</strong>
-        </div>
+        <FolderField folder={downloadFolder} onChange={changeDownloadFolder} onOpen={openDownloadFolder} accent={theme.liveAccent} disabled={isRecording} />
       </div>
 
-      {/* Right Panel: Live HUD Telemetry & Stop / Start Controls */}
-      <div className="flex-[1.2] rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
+      {/* Right: recording status and the start / stop button */}
+      <div className="flex-[1.2] rounded-card p-6 flex flex-col justify-between min-w-0" style={{ backgroundColor: theme.panelInner }}>
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[22px] font-bold text-white">2. Recording Telemetry HUD</h2>
-            {isRecording && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 text-xs font-black animate-pulse">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]" />
-                <span>REC LIVE</span>
-              </div>
-            )}
-          </div>
+          <PanelTitle aside={isRecording ? (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 text-xs font-black">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#ef4444]" />
+              <span>REC</span>
+            </div>
+          ) : undefined}>
+            Recording
+          </PanelTitle>
 
-          {/* Telemetry Display Card */}
-          <div className="w-full p-6 rounded-2xl bg-black/40 border border-white/10 flex flex-col gap-6 shadow-inner relative overflow-hidden">
+          <div className="w-full p-6 rounded-card bg-black/30 border border-white/[0.06] flex flex-col gap-6 relative overflow-hidden">
             {isRecording ? (
               <>
-                <div className="flex items-center justify-between">
+                <div className="flex items-end justify-between">
                   <div className="flex flex-col">
-                    <span className="text-xs text-gray-400 uppercase tracking-wider font-bold">Elapsed Recording Time:</span>
-                    <span className="text-4xl font-mono font-black text-white mt-1">
-                      {formatTime(recordingStatus?.duration_sec || 0)}
-                    </span>
+                    <FieldLabel>Duration</FieldLabel>
+                    <span className="text-4xl font-mono font-black text-white mt-1 tabular-nums">{formatTime(recordingStatus?.duration_sec || 0)}</span>
                   </div>
                   <div className="flex flex-col items-end">
-                    <span className="text-xs text-gray-400 uppercase tracking-wider font-bold">Captured File Size:</span>
-                    <span className="text-2xl font-mono font-bold text-blue-400 mt-1">
-                      {formatBytes(recordingStatus?.bytes_downloaded || 0)}
-                    </span>
+                    <FieldLabel>File size</FieldLabel>
+                    <span className="text-2xl font-mono font-bold mt-1 tabular-nums" style={{ color: theme.liveAccent }}>{formatBytes(recordingStatus?.bytes_downloaded || 0)}</span>
                   </div>
                 </div>
 
-                {/* Animated Stream Visualizer Wave */}
                 <div className="flex items-center justify-between gap-1.5 h-12 py-2">
                   {[...Array(24)].map((_, i) => (
-                    <motion.div 
-                      key={i} 
-                      className="flex-1 rounded-full bg-blue-500" 
-                      animate={{ height: ['15%', '100%', '15%'] }} 
-                      transition={{ 
-                        duration: 0.4 + (i % 5) * 0.15, 
-                        repeat: Infinity, 
-                        ease: "easeInOut", 
-                        delay: (i * 0.05) % 0.4 
-                      }} 
+                    <motion.div
+                      key={i}
+                      className="flex-1 rounded-full"
+                      style={{ backgroundColor: theme.liveAccent }}
+                      animate={{ height: ['15%', '100%', '15%'] }}
+                      transition={{ duration: 0.4 + (i % 5) * 0.15, repeat: Infinity, ease: "easeInOut", delay: (i * 0.05) % 0.4 }}
                     />
                   ))}
                 </div>
 
-                <div className="text-xs text-gray-400 truncate">
-                  Stream Output: <span className="font-mono text-white">{recordingStatus?.filename || 'Resolving broadcast title...'}</span>
+                <div className="text-[12px] text-gray-400 truncate">
+                  Saving to <span className="font-mono text-white">{recordingStatus?.filename || 'Looking up the stream title…'}</span>
                 </div>
               </>
             ) : (
               <div className="py-10 flex flex-col items-center justify-center text-center gap-3 text-gray-400">
-                <Radio size={48} className="text-blue-500/50" />
-                <div className="text-sm font-medium text-gray-300">Ready to Capture Live Stream</div>
-                <div className="text-xs text-gray-500 max-w-[320px]">
-                  Paste any active YouTube Live or Twitch URL and hit start. Stream segments are continuously stitched into a high-fidelity MP4.
+                <Radio size={44} style={{ color: `${theme.liveAccent}88` }} />
+                <div className="text-[15px] font-semibold text-gray-200">Ready to record</div>
+                <div className="text-[13px] text-gray-400 max-w-[320px]">
+                  Paste a YouTube Live or Twitch link and press Start. The recording is saved as an MP4 when you stop.
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Action Button */}
         <div>
           {isRecording ? (
             <button
               onClick={handleStopRecording}
               disabled={isStopping}
-              className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-lg text-white shadow-2xl transition-all active:translate-y-[2px] flex items-center justify-center gap-3 bg-red-600 hover:bg-red-500 border border-red-400/40"
-              style={{ boxShadow: `0 6px 20px rgba(239,68,68,0.4)` }}
+              className="w-full py-4 rounded-control font-black uppercase tracking-widest text-lg text-white transition-all active:translate-y-[2px] flex items-center justify-center gap-3 bg-red-600 hover:bg-red-500 disabled:opacity-70"
+              style={{ boxShadow: `0 6px 20px rgba(239,68,68,0.35)` }}
             >
               <Square size={20} fill="currentColor" />
-              <span>{isStopping ? 'Finalizing Container...' : 'Stop & Finalize MP4'}</span>
+              <span>{isStopping ? 'Saving…' : 'Stop & save'}</span>
             </button>
           ) : (
             <button
               onClick={handleStartRecording}
               disabled={!liveUrl}
-              className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-lg text-white shadow-2xl transition-all active:translate-y-[2px] flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed border border-blue-400/40"
-              style={{ boxShadow: `0 6px 20px rgba(59,130,246,0.3)` }}
+              className="w-full py-4 rounded-control font-black uppercase tracking-widest text-lg text-white transition-all active:translate-y-[2px] flex items-center justify-center gap-3 disabled:cursor-not-allowed disabled:!bg-[#2a2b36] disabled:!text-gray-500 disabled:!shadow-none"
+              style={{ backgroundColor: theme.liveAccent, boxShadow: `0 6px 20px rgba(59,130,246,0.3)` }}
             >
               <Radio size={20} />
-              <span>Start Live Recording</span>
+              <span>{liveUrl ? 'Start recording' : 'Paste a link to start'}</span>
             </button>
           )}
         </div>
@@ -1559,25 +1540,24 @@ function AdvancedGifMachineView({
     return fn.endsWith('.mp4') || fn.endsWith('.webm') || fn.endsWith('.mkv') || fn.endsWith('.mov');
   });
 
-  const qualitySummary = `${fps === 'original' ? 'Original FPS' : `${fps} FPS`} · ${scale === 'original' ? '100% Res' : scale}`;
+  const qualitySummary = `${fps === 'original' ? 'Original FPS' : `${fps} FPS`} · ${scale === 'original' ? 'full size' : scale}`;
 
-  // Dropdown options with Smart Blur Background
   const cropOptions: DropdownOption[] = [
-    { value: 'none', label: 'No Crop (Original Aspect)' },
-    { value: '16:9_blur', label: '16:9 (Smart Blur Background)', badge: 'Pro Blur' },
-    { value: '9:16_blur', label: '9:16 (Smart Blur Background)', badge: 'Reels Blur' },
-    { value: '1:1', label: '1:1 Square', badge: 'Avatar / IG' },
-    { value: '9:16', label: '9:16 Vertical Hard Crop', badge: 'Shorts' },
-    { value: '4:3', label: '4:3 Classic TV' },
+    { value: 'none', label: 'Original shape' },
+    { value: '16:9_blur', label: '16:9, blurred sides', desc: 'Fits any video into widescreen' },
+    { value: '9:16_blur', label: '9:16, blurred sides', desc: 'For Reels, Shorts, TikTok' },
+    { value: '1:1', label: 'Square 1:1', desc: 'Avatars, Instagram' },
+    { value: '9:16', label: '9:16, cropped', desc: 'Cuts the sides off' },
+    { value: '4:3', label: '4:3, cropped' },
   ];
 
   const speedOptions: DropdownOption[] = [
-    { value: '0.5', label: '0.5x Slowmo' },
-    { value: '0.75', label: '0.75x Speed' },
-    { value: '1.0', label: '1.0x Normal Speed' },
-    { value: '1.25', label: '1.25x Speed' },
-    { value: '1.5', label: '1.5x Fast' },
-    { value: '2.0', label: '2.0x 2x Speed' },
+    { value: '0.5', label: '0.5× (slow motion)' },
+    { value: '0.75', label: '0.75×' },
+    { value: '1.0', label: '1× (normal)' },
+    { value: '1.25', label: '1.25×' },
+    { value: '1.5', label: '1.5×' },
+    { value: '2.0', label: '2×' },
   ];
 
   const maxFileSizeOptions: DropdownOption[] = [
@@ -1588,429 +1568,270 @@ function AdvancedGifMachineView({
     { value: '50M', label: 'Web / Telegram (50 MB)', badge: '50MB' },
   ];
 
+  const accent = theme.gifAccent;
+  const hasSource = Boolean(localFilePath || selectedHistoryFile || url);
+  const sourceCard = (active: boolean) =>
+    `w-full p-3.5 rounded-control border text-left transition-colors ${active ? 'bg-white/[0.07]' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]'}`;
+  const sourceStyle = (active: boolean) => (active ? { borderColor: `${accent}99` } : undefined);
+  const chip = (on: boolean) =>
+    `flex-1 px-3 py-2 rounded-control border flex items-center justify-between gap-2 text-[13px] font-semibold transition-colors ${on ? 'text-white' : 'text-gray-300 border-white/[0.06] hover:bg-white/[0.05]'}`;
+
   return (
-    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
-      
-      {/* Symmetrical Left Arrow to return to Downloader */}
-      <div 
+    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
+
+      {/* Left arrow back to the downloader */}
+      <div
         onClick={handleSwitchToMain}
         className="absolute -left-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40"
       >
-        <button 
-          className="w-12 h-28 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
-          style={{ 
-            backgroundColor: theme.btnDarkBg, 
-            color: theme.gifAccent,
+        <button
+          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
+          style={{
+            backgroundColor: theme.btnDarkBg,
+            color: accent,
             border: `1px solid rgba(245, 158, 11, 0.25)`,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)` 
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)`
           }}
           title="Back to Downloader"
         >
-          <ChevronLeft size={28} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" style={{ color: theme.gifAccent, filter: `drop-shadow(0 2px 8px ${theme.gifAccent}88)` }} />
-          <span 
-            className="text-[11px] font-black uppercase tracking-wider"
-            style={{ color: theme.gifAccent, textShadow: `0 2px 10px ${theme.gifAccent}aa` }}
-          >
+          <ChevronLeft size={28} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" style={{ color: accent, filter: `drop-shadow(0 2px 8px ${accent}88)` }} />
+          <span className="text-[11px] font-black uppercase tracking-wider" style={{ color: accent, textShadow: `0 2px 10px ${accent}aa` }}>
             MAIN
           </span>
         </button>
       </div>
 
-      {/* Left Panel: Video Source Selector */}
-      <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
-        <div>
-          {/* Header on ONE Single Line */}
-          <div className="flex items-center justify-between gap-3 mb-4 w-full">
-            <h2 className="text-[22px] font-bold whitespace-nowrap text-white">1. Choose Video Source</h2>
-            
-            {/* Clickable Custom Quality Pill Button with Subtle Yellow Glow */}
-            <button 
-              onClick={() => setShowQualityModal(true)}
-              className="px-3 py-1.5 rounded-full font-bold text-xs whitespace-nowrap border hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm"
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.06)',
-                borderColor: `${theme.gifAccent}66`,
-                color: theme.textMain
-              }}
-              title="Click to customize FFmpeg video quality, framerate & dithering"
-            >
-              <Sliders size={13} style={{ color: theme.gifAccent }} />
-              <span style={{ textShadow: `0 1px 6px ${theme.gifAccent}44` }}>{qualitySummary}</span>
-            </button>
-          </div>
+      {/* Left: pick one source */}
+      <div className="flex-1 rounded-card p-6 flex flex-col min-w-0" style={{ backgroundColor: theme.panelInner }}>
+        <PanelTitle>Source</PanelTitle>
 
-          <div className="flex flex-col gap-3">
-            {/* Option A: Import Local File */}
-            <button
-              onClick={handlePickLocalVideo}
-              className={`p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
-                selectedSourceType === 'local' && localFilePath ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/5 hover:bg-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-3 truncate">
-                <div className="p-2 rounded-lg bg-white/10" style={{ color: theme.gifAccent }}>
-                  <HardDrive size={18} />
-                </div>
-                <div className="truncate">
-                  <div className="text-sm font-bold text-white">Import Your Own Video File</div>
-                  <div className="text-xs text-gray-400 truncate max-w-[280px]">
-                    {localFilePath ? localFilePath.split('\\').pop() : 'Click to select MP4, MOV, MKV, AVI from PC'}
-                  </div>
+        <div className="flex flex-col gap-3 min-h-0">
+          {/* Local file */}
+          <button onClick={handlePickLocalVideo} className={sourceCard(selectedSourceType === 'local')} style={sourceStyle(selectedSourceType === 'local')}>
+            <div className="flex items-center gap-3 min-w-0">
+              <HardDrive size={18} className="shrink-0" style={{ color: accent }} />
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-semibold text-white">Video file on this PC</div>
+                <div className="text-[12px] text-gray-400 truncate">
+                  {localFilePath ? localFilePath.split('\\').pop() : 'MP4, MOV, MKV, AVI…'}
                 </div>
               </div>
-              <FolderOpen size={18} style={{ color: theme.gifAccent }} className="shrink-0 ml-2" />
-            </button>
+              <span className="text-[11px] font-bold uppercase tracking-wider shrink-0" style={{ color: accent }}>{localFilePath ? 'Change' : 'Browse'}</span>
+            </div>
+          </button>
 
-            {/* Option B: Pick From Downloaded Ones */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-bold text-white">
-                  <History size={16} className="text-amber-400" />
-                  <span>Pick From Downloaded Videos:</span>
-                </div>
-              </div>
-
-              {videoHistory.length > 0 ? (
-                <div className="max-h-24 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
-                  {videoHistory.map((v: any, i: number) => (
-                    <div 
+          {/* From history */}
+          <div className={sourceCard(selectedSourceType === 'history')} style={sourceStyle(selectedSourceType === 'history')}>
+            <div className="flex items-center gap-3 mb-2">
+              <History size={18} className="shrink-0" style={{ color: accent }} />
+              <div className="text-[14px] font-semibold text-white">From your downloads</div>
+            </div>
+            {videoHistory.length > 0 ? (
+              <div className="max-h-[200px] overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
+                {videoHistory.map((v: any, i: number) => {
+                  const picked = selectedSourceType === 'history' && selectedHistoryFile === v.filename;
+                  return (
+                    <button
                       key={i}
-                      onClick={() => {
-                        setSelectedHistoryFile(v.filename);
-                        setSelectedSourceType('history');
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-mono cursor-pointer truncate transition-all flex items-center justify-between ${
-                        selectedSourceType === 'history' && selectedHistoryFile === v.filename
-                          ? 'bg-white/15 text-white border border-white/30 font-bold'
-                          : 'bg-black/30 hover:bg-black/60 text-gray-300'
-                      }`}
+                      onClick={() => { setSelectedHistoryFile(v.filename); setSelectedSourceType('history'); }}
+                      className={`px-2.5 py-1.5 rounded-chip text-[12px] text-left truncate transition-colors flex items-center justify-between gap-2 ${picked ? 'bg-white/10 text-white font-semibold' : 'text-gray-300 hover:bg-white/[0.06]'}`}
                       title={v.filename}
                     >
                       <span className="truncate">{v.filename}</span>
-                      {selectedSourceType === 'history' && selectedHistoryFile === v.filename && (
-                        <Check size={14} style={{ color: theme.gifAccent }} className="shrink-0 ml-1" />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-gray-500 italic py-2 text-center">No downloaded videos in history yet.</div>
-              )}
-            </div>
-
-            {/* Option C: Direct Web Link */}
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Film size={16} className="text-yellow-400" />
-                <span>Or From Current URL:</span>
+                      {picked && <Check size={14} className="shrink-0" style={{ color: accent }} />}
+                    </button>
+                  );
+                })}
               </div>
-              <input 
-                type="text"
-                placeholder="Paste video URL directly..."
-                value={url}
-                onChange={e => {
-                  setUrl(e.target.value);
-                  setSelectedSourceType('url');
-                }}
-                className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-xs text-white outline-none"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Selected Source Status */}
-        <div className="text-xs font-mono opacity-60 truncate">
-          Active Source: <strong style={{ color: theme.gifAccent }} className="font-bold">{selectedSourceType.toUpperCase()}</strong>
-        </div>
-      </div>
-
-      {/* Right Panel: Advanced 2-Pass Palettegen & Power Controls */}
-      <div className="flex-[1.2] rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[22px] font-bold whitespace-nowrap" style={{ color: theme.textMain }}>2. GIF Output & Engine</h2>
+            ) : (
+              <div className="text-[12px] text-gray-500">Videos you download will show up here.</div>
+            )}
           </div>
 
-          <div className="flex flex-col gap-3">
-            {/* Format Selection */}
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setGifFormat('gif')}
-                className={`flex-1 py-2 px-3 rounded-xl border text-center transition-all ${
-                  gifFormat === 'gif' ? 'bg-white/15 border-amber-500/40 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
-                }`}
-              >
-                <div className="text-xs font-bold" style={{ color: theme.textMain }}>Master GIF (.gif)</div>
-                <div className="text-[10px] opacity-70">2-Pass Palettegen (60fps)</div>
-              </button>
-
-              <button 
-                onClick={() => setGifFormat('loop_mp4')}
-                className={`flex-1 py-2 px-3 rounded-xl border text-center transition-all ${
-                  gifFormat === 'loop_mp4' ? 'bg-white/15 border-amber-500/40 text-white font-bold' : 'bg-black/30 border-white/5 text-gray-400'
-                }`}
-              >
-                <div className="text-xs font-bold flex items-center justify-center gap-1" style={{ color: theme.textMain }}>
-                  <Volume2 size={12} style={{ color: theme.gifAccent }} />
-                  <span>Looping Clip (.mp4)</span>
-                </div>
-                <div className="text-[10px] opacity-70">Clean Video with Audio</div>
-              </button>
-            </div>
-
-            {/* Time Trim Range */}
-            <div className="flex gap-2">
-              <div className="flex-1 p-2.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-gray-400">Start Time:</span>
-                <input 
-                  type="text"
-                  value={startTime}
-                  onChange={e => setStartTime(e.target.value)}
-                  placeholder="00:00:00"
-                  className="w-full px-2 py-1 rounded bg-black/40 border border-white/10 font-mono text-xs text-white outline-none"
-                />
-              </div>
-
-              <div className="flex-1 p-2.5 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-gray-400">End Time:</span>
-                <input 
-                  type="text"
-                  value={endTime}
-                  onChange={e => setEndTime(e.target.value)}
-                  placeholder="00:00:10"
-                  className="w-full px-2 py-1 rounded bg-black/40 border border-white/10 font-mono text-xs text-white outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Power Filters: Boomerang & Aspect Ratio Cropping */}
-            <div className="flex gap-2 items-center">
-              {/* Boomerang Toggle */}
-              <button
-                onClick={() => setBoomerang(!boomerang)}
-                className={`flex-1 p-2.5 rounded-xl border transition-all flex items-center justify-between ${
-                  boomerang ? 'bg-amber-500/20 border-amber-500/40 text-white' : 'bg-white/5 border-white/5 text-gray-400'
-                }`}
-                title="Plays forward then in reverse seamlessly"
-              >
-                <div className="flex items-center gap-2">
-                  <Repeat size={14} style={{ color: boomerang ? theme.gifAccent : 'inherit' }} />
-                  <span className="text-xs font-bold">Boomerang Loop</span>
-                </div>
-                <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${boomerang ? 'bg-amber-500 border-amber-400' : 'border-gray-500'}`}>
-                  {boomerang && <Check size={10} className="text-black font-bold" />}
-                </div>
-              </button>
-
-              {/* Aspect Ratio / Smart Blur Dropdown */}
-              <div className="flex-1">
-                <CustomDropdown 
-                  value={crop}
-                  options={cropOptions}
-                  onChange={setCrop}
-                  theme={theme}
-                  variant="tactile-dark"
-                  size="sm"
-                  accentColor={theme.gifAccent}
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            {/* Speed & Meme Caption Controls */}
-            <div className="flex gap-2 items-center">
-              <div className="flex-1">
-                <CustomDropdown 
-                  value={speed}
-                  options={speedOptions}
-                  onChange={setSpeed}
-                  theme={theme}
-                  variant="tactile-dark"
-                  size="sm"
-                  accentColor={theme.gifAccent}
-                  className="w-full"
-                />
-              </div>
-
-              <button
-                onClick={() => setShowMemeInputs(!showMemeInputs)}
-                className={`px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  showMemeInputs || memeTop || memeBottom ? 'bg-amber-500/20 border-amber-500/40 text-white' : 'bg-white/5 border-white/5 text-gray-400'
-                }`}
-              >
-                <Type size={14} style={{ color: theme.gifAccent }} />
-                <span>Meme Text</span>
-              </button>
-            </div>
-
-            {/* Collapsible Meme Banner Inputs */}
-            <AnimatePresence>
-              {showMemeInputs && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden flex flex-col gap-2 p-2.5 rounded-xl bg-black/40 border border-white/10"
-                >
-                  <input 
-                    type="text"
-                    value={memeTop}
-                    onChange={e => setMemeTop(e.target.value)}
-                    placeholder="TOP TEXT (Classic Meme Style)..."
-                    className="w-full px-2 py-1 rounded bg-black/60 border border-white/10 text-xs text-white font-bold uppercase tracking-wider outline-none"
-                  />
-                  <input 
-                    type="text"
-                    value={memeBottom}
-                    onChange={e => setMemeBottom(e.target.value)}
-                    placeholder="BOTTOM TEXT..."
-                    className="w-full px-2 py-1 rounded bg-black/60 border border-white/10 text-xs text-white font-bold uppercase tracking-wider outline-none"
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Custom Output Name */}
-            <input 
-              type="text"
-              placeholder="Custom Output Name (Optional)..."
-              value={customGifName}
-              onChange={e => setCustomGifName(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/5 text-xs text-white outline-none"
+          {/* From a link */}
+          <div className={sourceCard(selectedSourceType === 'url')} style={sourceStyle(selectedSourceType === 'url')}>
+            <label htmlFor="gif-url" className="flex items-center gap-3 mb-2 cursor-text">
+              <Film size={18} className="shrink-0" style={{ color: accent }} />
+              <span className="text-[14px] font-semibold text-white">From a link</span>
+            </label>
+            <input
+              id="gif-url" type="text" placeholder="Paste a video link" value={url}
+              onChange={e => { setUrl(e.target.value); setSelectedSourceType('url'); }}
+              onFocus={() => url && setSelectedSourceType('url')}
+              className={fieldClass}
             />
           </div>
         </div>
-
-        {/* Action Button */}
-        <div>
-          <button
-            onClick={handleStartGifRender}
-            disabled={isDownloading || (!localFilePath && !selectedHistoryFile && !url)}
-            className="w-full py-3.5 rounded-2xl font-black uppercase tracking-wider text-base text-black shadow-2xl transition-all active:translate-y-[2px] flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ 
-              backgroundColor: theme.gifAccent, 
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 5px 0 #b45309, 0 8px 15px rgba(245,158,11,0.3)` 
-            }}
-          >
-            <Sparkles size={18} />
-            <span>Generate Master GIF</span>
-          </button>
-        </div>
       </div>
 
-      {/* Quality Settings Modal */}
+      {/* Right: output options and the create button */}
+      <div className="flex-[1.2] rounded-card p-6 flex flex-col justify-between min-w-0" style={{ backgroundColor: theme.panelInner }}>
+        <div className="flex flex-col gap-3">
+          <PanelTitle aside={
+            <button
+              onClick={() => setShowQualityModal(true)}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold border border-white/[0.08] hover:bg-white/[0.06] transition-colors flex items-center gap-1.5 text-[#D9D9D9]"
+              title="Frame rate, resolution, dithering and size limit"
+            >
+              <Sliders size={13} style={{ color: accent }} />
+              <span>{qualitySummary}</span>
+            </button>
+          }>
+            Output
+          </PanelTitle>
+
+          {/* Format */}
+          <div className="flex p-1 rounded-control bg-[#17171d] border border-white/[0.06] -mt-3" role="tablist">
+            {([['gif', 'GIF', 'Silent, plays anywhere'], ['loop_mp4', 'Looping MP4', 'Smaller, keeps the sound']] as const).map(([key, label, sub]) => (
+              <button
+                key={key} role="tab" aria-selected={gifFormat === key} onClick={() => setGifFormat(key)}
+                className={`flex-1 py-1.5 rounded-chip text-center transition-colors ${gifFormat === key ? 'bg-white/10' : 'hover:bg-white/[0.04]'}`}
+              >
+                <div className={`text-[13px] font-bold ${gifFormat === key ? 'text-white' : 'text-gray-400'}`}>{label}</div>
+                <div className="text-[11px] text-gray-500">{sub}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Trim */}
+          <div className="flex gap-3">
+            <div className="flex-1 flex flex-col gap-1.5">
+              <FieldLabel htmlFor="gif-start">Start</FieldLabel>
+              <input id="gif-start" type="text" value={startTime} onChange={e => setStartTime(e.target.value)} placeholder="00:00:00" className={`${fieldClass} font-mono tabular-nums`} />
+            </div>
+            <div className="flex-1 flex flex-col gap-1.5">
+              <FieldLabel htmlFor="gif-end">End</FieldLabel>
+              <input id="gif-end" type="text" value={endTime} onChange={e => setEndTime(e.target.value)} placeholder="00:00:10" className={`${fieldClass} font-mono tabular-nums`} />
+            </div>
+          </div>
+
+          {/* Crop and speed */}
+          <div className="flex gap-3">
+            <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+              <FieldLabel>Shape</FieldLabel>
+              <CustomDropdown value={crop} options={cropOptions} onChange={setCrop} theme={theme} accentColor={accent} className="w-full" align="left" />
+            </div>
+            <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+              <FieldLabel>Speed</FieldLabel>
+              <CustomDropdown value={speed} options={speedOptions} onChange={setSpeed} theme={theme} accentColor={accent} className="w-full" />
+            </div>
+          </div>
+
+          {/* Effects */}
+          <div className="flex gap-3">
+            <div className={chip(boomerang)} style={boomerang ? { borderColor: `${accent}66` } : undefined} title="Plays forward, then backwards">
+              <span className="flex items-center gap-2"><Repeat size={15} className="text-gray-400" />Boomerang</span>
+              <Toggle on={boomerang} onChange={setBoomerang} accent={accent} label="Boomerang" />
+            </div>
+            <div className={chip(showMemeInputs || Boolean(memeTop || memeBottom))} style={showMemeInputs || memeTop || memeBottom ? { borderColor: `${accent}66` } : undefined} title="Big captions at the top and bottom">
+              <span className="flex items-center gap-2"><Type size={15} className="text-gray-400" />Captions</span>
+              <Toggle on={showMemeInputs} onChange={v => { setShowMemeInputs(v); if (!v) { setMemeTop(''); setMemeBottom(''); } }} accent={accent} label="Captions" />
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {showMemeInputs && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden flex gap-3"
+              >
+                <input type="text" value={memeTop} onChange={e => setMemeTop(e.target.value)} placeholder="Top caption" aria-label="Top caption" className={`${fieldClass} uppercase font-bold`} />
+                <input type="text" value={memeBottom} onChange={e => setMemeBottom(e.target.value)} placeholder="Bottom caption" aria-label="Bottom caption" className={`${fieldClass} uppercase font-bold`} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <input
+            type="text" placeholder="File name (optional)" aria-label="File name"
+            value={customGifName} onChange={e => setCustomGifName(e.target.value)} className={fieldClass}
+          />
+        </div>
+
+        <button
+          onClick={handleStartGifRender}
+          disabled={isDownloading || !hasSource}
+          className="w-full py-3.5 rounded-control font-black uppercase tracking-wider text-base text-black transition-all active:translate-y-[2px] flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:!bg-[#2a2b36] disabled:!text-gray-500 disabled:!shadow-none"
+          style={{ backgroundColor: accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 5px 0 #b45309, 0 8px 15px rgba(245,158,11,0.3)` }}
+        >
+          <Sparkles size={18} />
+          <span>{isDownloading ? 'Working…' : !hasSource ? 'Pick a video first' : gifFormat === 'gif' ? 'Create GIF' : 'Create looping MP4'}</span>
+        </button>
+      </div>
+
+      {/* Quality settings */}
       <AnimatePresence>
         {showQualityModal && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md px-4 pointer-events-auto"
+            onClick={() => setShowQualityModal(false)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-[500px] p-6 rounded-[28px] shadow-2xl flex flex-col gap-5 relative border border-white/10"
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-[480px] p-6 rounded-panel shadow-2xl flex flex-col gap-4 relative border border-white/10"
               style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
             >
-              <button 
-                onClick={() => setShowQualityModal(false)}
-                className="absolute top-5 right-5 hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"
-              >
-                <X size={20} />
-              </button>
-
-              <div className="flex items-center gap-2.5">
-                <Sliders size={20} style={{ color: theme.gifAccent }} />
-                <h3 className="text-xl font-bold text-white">FFmpeg 2-Pass Quality Settings</h3>
-              </div>
-
-              <div className="flex flex-col gap-4 text-xs">
-                {/* Framerate Selection */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="opacity-80 font-bold">1. Target Framerate (FPS):</span>
-                  <CustomDropdown 
-                    value={fps}
-                    options={[
-                      { value: 'original', label: 'Original FPS (Match Source Video)', badge: 'Recommended' },
-                      { value: '60', label: '60 FPS (Ultra Smooth)' },
-                      { value: '50', label: '50 FPS' },
-                      { value: '30', label: '30 FPS (Standard Web)' },
-                      { value: '24', label: '24 FPS (Cinematic)' },
-                      { value: '15', label: '15 FPS (Compact File Size)' },
-                    ]}
-                    onChange={setFps}
-                    theme={theme}
-                    variant="tactile-dark"
-                    accentColor={theme.gifAccent}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* Resolution / Scale Selection */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="opacity-80 font-bold">2. Video Resolution (Lanczos Scale):</span>
-                  <CustomDropdown 
-                    value={scale}
-                    options={[
-                      { value: 'original', label: 'Original Source Resolution', badge: '1:1 Pixel Match' },
-                      { value: '1080p', label: '1080p Full HD (Lanczos Filter)' },
-                      { value: '720p', label: '720p HD (Balanced Quality)' },
-                      { value: '480p', label: '480p Standard (Medium GIF)' },
-                      { value: '360p', label: '360p Lightweight (Small Discord)' },
-                    ]}
-                    onChange={setScale}
-                    theme={theme}
-                    variant="tactile-dark"
-                    accentColor={theme.gifAccent}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* Dithering & Palette Matrix */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="opacity-80 font-bold">3. Color Palette & Dithering Algorithm:</span>
-                  <CustomDropdown 
-                    value={dither}
-                    options={[
-                      { value: 'bayer', label: 'Bayer Matrix Scale 5', badge: 'Recommended' },
-                      { value: 'sierra', label: 'Sierra 2-4A (Smooth Gradients)' },
-                      { value: 'floyd', label: 'Floyd-Steinberg (Classic Precision)' },
-                      { value: 'none', label: 'No Dither (Hard Edge / Cartoon)' },
-                    ]}
-                    onChange={setDither}
-                    theme={theme}
-                    variant="tactile-dark"
-                    accentColor={theme.gifAccent}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* Max File Size Limit */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="opacity-80 font-bold">4. Max File Size Target:</span>
-                  <CustomDropdown 
-                    value={maxFileSize}
-                    options={maxFileSizeOptions}
-                    onChange={setMaxFileSize}
-                    theme={theme}
-                    variant="tactile-dark"
-                    accentColor={theme.gifAccent}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-white/10">
-                <button 
-                  onClick={() => setShowQualityModal(false)}
-                  className="w-full py-3 rounded-xl font-bold text-sm uppercase tracking-wider text-black shadow-lg transition-all active:scale-[0.98]"
-                  style={{ backgroundColor: theme.gifAccent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 #b45309` }}
-                >
-                  Save Quality Settings
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2.5"><Sliders size={20} style={{ color: accent }} />Quality</h3>
+                <button onClick={() => setShowQualityModal(false)} className="p-1.5 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title="Close">
+                  <X size={18} />
                 </button>
               </div>
+
+              <div className="flex flex-col">
+                <SettingRow label="Frame rate" hint="Lower is smaller">
+                  <CustomDropdown
+                    value={fps}
+                    options={[
+                      { value: 'original', label: 'Original' },
+                      { value: '60', label: '60 FPS' }, { value: '50', label: '50 FPS' }, { value: '30', label: '30 FPS' },
+                      { value: '24', label: '24 FPS' }, { value: '15', label: '15 FPS' },
+                    ]}
+                    onChange={setFps} theme={theme} accentColor={accent} minWidth={170}
+                  />
+                </SettingRow>
+                <SettingRow label="Resolution">
+                  <CustomDropdown
+                    value={scale}
+                    options={[
+                      { value: 'original', label: 'Original' },
+                      { value: '1080p', label: '1080p' }, { value: '720p', label: '720p' },
+                      { value: '480p', label: '480p' }, { value: '360p', label: '360p' },
+                    ]}
+                    onChange={setScale} theme={theme} accentColor={accent} minWidth={170}
+                  />
+                </SettingRow>
+                <SettingRow label="Dithering" hint="GIFs only">
+                  <CustomDropdown
+                    value={dither}
+                    options={[
+                      { value: 'bayer', label: 'Bayer (pattern)', desc: 'Good default' },
+                      { value: 'sierra', label: 'Sierra (smooth)', desc: 'Best for gradients' },
+                      { value: 'floyd', label: 'Floyd-Steinberg', desc: 'Fine detail' },
+                      { value: 'none', label: 'None', desc: 'Flat colours, cartoons' },
+                    ]}
+                    onChange={setDither} theme={theme} accentColor={accent} minWidth={170}
+                  />
+                </SettingRow>
+                <SettingRow label="Size limit">
+                  <CustomDropdown value={maxFileSize} options={maxFileSizeOptions} onChange={setMaxFileSize} theme={theme} accentColor={accent} minWidth={170} />
+                </SettingRow>
+              </div>
+
+              <button
+                onClick={() => setShowQualityModal(false)}
+                className="w-full py-3 rounded-control font-bold text-sm uppercase tracking-wider text-black transition-all active:scale-[0.98]"
+                style={{ backgroundColor: accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 #b45309` }}
+              >
+                Done
+              </button>
             </motion.div>
           </motion.div>
         )}
@@ -2053,6 +1874,7 @@ function SettingsView({
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [showTokenText, setShowTokenText] = useState(false);
   const [showTwitchHelp, setShowTwitchHelp] = useState(false);
+  const [rightTab, setRightTab] = useState<'history' | 'signin'>('history');
 
   useEffect(() => {
     if (twitchToken) setTwitchTokenInput(twitchToken);
@@ -2146,15 +1968,15 @@ function SettingsView({
     : historyItems;
 
   const qualityOptions: DropdownOption[] = [
-    { value: 'Best', label: 'Best Quality (4K / 1080p)', badge: 'Max' },
-    { value: '1440p', label: '1440p QHD' },
-    { value: '1080p', label: '1080p Full HD' },
-    { value: '720p', label: '720p HD' },
-    { value: '480p', label: '480p Standard' },
+    { value: 'Best', label: 'Best available', desc: 'Up to 4K, whatever the video has' },
+    { value: '1440p', label: '1440p' },
+    { value: '1080p', label: '1080p' },
+    { value: '720p', label: '720p' },
+    { value: '480p', label: '480p' },
   ];
 
   const browserOptions: DropdownOption[] = [
-    { value: 'none', label: 'No Browser Cookies (Default)' },
+    { value: 'none', label: 'Choose a browser' },
     { value: 'chrome', label: 'Google Chrome' },
     { value: 'firefox', label: 'Mozilla Firefox' },
     { value: 'brave', label: 'Brave Browser' },
@@ -2165,408 +1987,233 @@ function SettingsView({
   ];
 
   const codecOptions: DropdownOption[] = [
-    { value: 'auto', label: 'Auto (Best Quality & Speed)', badge: 'Auto' },
-    { value: 'h264', label: 'H.264 / AVC (Max Device Compatibility)', badge: 'H.264' },
-    { value: 'av1', label: 'AV1 / VP9 (Maximum Compression)', badge: 'AV1' },
+    { value: 'auto', label: 'Automatic', desc: 'Best quality the site offers' },
+    { value: 'h264', label: 'H.264', desc: 'Plays on every device' },
+    { value: 'av1', label: 'AV1', desc: 'Smallest files, newer devices' },
   ];
 
+  const sectionName = isLiveSection ? 'Live recorder' : isGifSection ? 'GIF studio' : 'Downloader';
+  const ytSignedIn = Boolean(cookieStatus?.hasYouTube);
+
   return (
-    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
-      
-      {/* Left Panel: Contextual Settings Controls */}
-      <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
-        <div className="overflow-y-auto custom-scrollbar pr-1">
-          <h2 className="text-[24px] mb-4 font-bold text-center w-full" style={{ color: theme.textMain }}>
-            {isLiveSection ? 'Live DVR Settings' : isGifSection ? 'GIF Machine Settings' : 'Downloader Power Settings'}
-          </h2>
-          
-          <div className="w-full flex flex-col gap-3 pl-1 mt-1">
-            {isGifSection ? (
-              <>
-                {/* GIF Quality Preferences */}
-                <div className="flex items-center justify-between mx-2">
-                  <span className="text-[14px] font-medium" style={{ color: theme.textMain }}>Default Framerate:</span>
-                  <CustomDropdown 
-                    value={gifFps}
-                    options={['original', '60', '50', '30', '24', '15']}
-                    onChange={setGifFps}
-                    theme={theme}
-                    variant="tactile-light"
-                    size="sm"
-                    accentColor={accentColor}
-                  />
-                </div>
+    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
 
-                <div className="flex items-center justify-between mx-2">
-                  <span className="text-[14px] font-medium" style={{ color: theme.textMain }}>Default Resolution:</span>
-                  <CustomDropdown 
-                    value={gifScale}
-                    options={['original', '1080p', '720p', '480p', '360p']}
-                    onChange={setGifScale}
-                    theme={theme}
-                    variant="tactile-light"
-                    size="sm"
-                    accentColor={accentColor}
-                  />
-                </div>
+      {/* Left: the settings for this section, as one flat list */}
+      <div className="flex-1 rounded-card p-6 flex flex-col justify-between min-w-0" style={{ backgroundColor: theme.panelInner }}>
+        <div className="min-h-0 overflow-y-auto custom-scrollbar pr-1">
+          <PanelTitle aside={<span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border" style={{ color: accentColor, borderColor: `${accentColor}55` }}>{sectionName}</span>}>
+            Settings
+          </PanelTitle>
 
-                <div className="flex items-center justify-between mx-2">
-                  <span className="text-[14px] font-medium" style={{ color: theme.textMain }}>Dithering Engine:</span>
-                  <CustomDropdown 
-                    value={gifDither}
-                    options={[
-                      { value: 'bayer', label: 'Bayer Matrix 5' },
-                      { value: 'sierra', label: 'Sierra 2-4A' },
-                      { value: 'floyd', label: 'Floyd-Steinberg' },
-                      { value: 'none', label: 'No Dithering' }
-                    ]}
-                    onChange={setGifDither}
-                    theme={theme}
-                    variant="tactile-light"
-                    size="sm"
-                    accentColor={accentColor}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between mx-2 pt-1">
-                  <span className="text-[14px] font-medium" style={{ color: theme.textMain }}>Sound Loop MP4 Default:</span>
-                  <button 
-                    onClick={() => setGifAudioLoop(!gifAudioLoop)} 
-                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4" 
-                    style={{ backgroundColor: gifAudioLoop ? accentColor : '#555' }}
-                  >
-                    <div 
-                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
-                      style={{ 
-                        backgroundColor: gifAudioLoop ? theme.inputBg : '#a0a0a8', 
-                        left: gifAudioLoop ? 'auto' : '-3px', 
-                        right: gifAudioLoop ? '-3px' : 'auto' 
-                      }} 
-                    />
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* 1. Turbo Multi-Thread Acceleration (aria2c) */}
-                <div className="flex items-center justify-between mx-2 pt-0.5 p-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                  <div className="flex flex-col">
-                    <span className="text-[14px] font-bold flex items-center gap-1.5 text-blue-400">
-                      <Zap size={16} />
-                      <span>Turbo 16x Multi-Thread Engine</span>
-                    </span>
-                    <span className="text-[10px] text-gray-400">Bypasses throttling with aria2c & auto-fallback</span>
-                  </div>
-                  <button 
-                    onClick={() => setTurboMode(!turboMode)} 
-                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4 shrink-0" 
-                    style={{ backgroundColor: turboMode ? '#3B82F6' : '#555' }}
-                  >
-                    <div 
-                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
-                      style={{ 
-                        backgroundColor: turboMode ? theme.inputBg : '#a0a0a8', 
-                        left: turboMode ? 'auto' : '-3px', 
-                        right: turboMode ? '-3px' : 'auto' 
-                      }} 
-                    />
-                  </button>
-                </div>
-
-                {/* 2. Smart Chapter Splitter */}
-                <div className="flex items-center justify-between mx-2 pt-0.5">
-                  <div className="flex flex-col">
-                    <span className="text-[14px] font-medium flex items-center gap-1.5 text-white">
-                      <ListPlus size={16} className="text-amber-400" />
-                      <span>Auto-Split Video Chapters</span>
-                    </span>
-                    <span className="text-[10px] text-gray-400">Divides albums / DJ sets into numbered MP3 tracks</span>
-                  </div>
-                  <button 
-                    onClick={() => setSplitChapters(!splitChapters)} 
-                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4 shrink-0" 
-                    style={{ backgroundColor: splitChapters ? '#F59E0B' : '#555' }}
-                  >
-                    <div 
-                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
-                      style={{ 
-                        backgroundColor: splitChapters ? theme.inputBg : '#a0a0a8', 
-                        left: splitChapters ? 'auto' : '-3px', 
-                        right: splitChapters ? '-3px' : 'auto' 
-                      }} 
-                    />
-                  </button>
-                </div>
-
-                {/* 3. Download Quality */}
-                <div className="flex items-center justify-between mx-2">
-                  <span className="text-[14px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Download Quality:</span>
-                  <CustomDropdown 
-                    value={quality}
-                    options={qualityOptions}
-                    onChange={setQuality}
-                    theme={theme}
-                    variant="tactile-light"
-                    size="sm"
-                    accentColor={accentColor}
-                  />
-                </div>
-
-                {/* 4. SponsorBlock */}
-                <div className="flex items-center justify-between mx-2">
-                  <div className="flex flex-col">
-                    <span className="text-[14px] font-medium flex items-center gap-1.5" style={{ color: theme.textMain }}>
-                      <Shield size={15} className="text-emerald-400" />
-                      <span>SponsorBlock Auto-Skip</span>
-                    </span>
-                  </div>
-                  <button 
-                    onClick={() => setSponsorBlock(!sponsorBlock)} 
-                    className="relative flex items-center w-12 h-5 rounded-full transition-colors ml-4 shrink-0" 
-                    style={{ backgroundColor: sponsorBlock ? '#10B981' : '#555' }}
-                  >
-                    <div 
-                      className="absolute w-7 h-7 rounded-full transition-all shadow-md" 
-                      style={{ 
-                        backgroundColor: sponsorBlock ? theme.inputBg : '#a0a0a8', 
-                        left: sponsorBlock ? 'auto' : '-3px', 
-                        right: sponsorBlock ? '-3px' : 'auto' 
-                      }} 
-                    />
-                  </button>
-                </div>
-
-                {/* 5. Master Authentication & Cookie Manager (Twitch Sub VODs & Members) */}
-                <div className="flex flex-col gap-2.5 mx-2 p-3 rounded-2xl bg-black/40 border border-white/10 shadow-inner">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Cookie size={16} className="text-amber-400" />
-                      <span className="text-[13px] font-bold text-white">Authentication & Cookies</span>
-                    </div>
-                    {cookieStatus?.hasCookies ? (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="truncate max-w-[140px]">{cookieStatus.summary}</span>
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                        ○ No Cookies Loaded
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Twitch Auth Token Quick Input */}
-                  <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-white/5 border border-white/5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-gray-300 flex items-center gap-1">
-                        <Key size={12} className="text-purple-400" />
-                        <span>Twitch Auth Token (Sub-Only VODs):</span>
-                      </span>
-                      <button 
-                        onClick={() => setShowTwitchHelp(!showTwitchHelp)}
-                        className="text-[10px] text-purple-400 hover:text-purple-300 underline flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <HelpCircle size={11} />
-                        <span>How to get token?</span>
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <input 
-                        type={showTokenText ? "text" : "password"}
-                        value={twitchTokenInput}
-                        onChange={e => setTwitchTokenInput(e.target.value)}
-                        placeholder="Paste Twitch auth-token here..."
-                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs text-white font-mono outline-none"
-                      />
-                      <button 
-                        onClick={() => setShowTokenText(!showTokenText)}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white"
-                        title={showTokenText ? "Hide token" : "Show token"}
-                      >
-                        {showTokenText ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                      <button
-                        onClick={handleSaveTwitchToken}
-                        disabled={isSavingToken}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 active:scale-95 transition-all text-white shrink-0 shadow-md cursor-pointer disabled:opacity-50"
-                      >
-                        {isSavingToken ? '...' : 'Save'}
-                      </button>
-                    </div>
-
-                    {showTwitchHelp && (
-                      <div className="text-[10px] text-gray-300 p-2.5 rounded-lg bg-black/70 border border-purple-500/30 leading-relaxed mt-1">
-                        💡 <strong>How to get your Twitch Auth Token:</strong><br/>
-                        1. Open <span className="text-purple-300 font-mono">twitch.tv</span> in your browser where you're logged in with a sub.<br/>
-                        2. Press <kbd className="px-1 py-0.5 bg-white/10 rounded font-mono">F12</kbd> → Click <strong>Application</strong> tab (or <strong>Storage</strong> in Firefox).<br/>
-                        3. Under <strong>Cookies</strong>, click <span className="text-purple-300 font-mono">https://www.twitch.tv</span>.<br/>
-                        4. Copy the value of <strong className="text-white font-mono">auth-token</strong> and paste it above!
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions: Import cookies.txt & Clear */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={handleImportCookiesFile}
-                      disabled={isImportingCookies}
-                      className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm disabled:opacity-50"
-                      title="Import any cookies.txt file exported from browser"
-                    >
-                      <FileText size={13} className="text-blue-400" />
-                      <span>{isImportingCookies ? 'Importing...' : 'Import cookies.txt'}</span>
-                    </button>
-
-                    <button
-                      onClick={handleClearCookies}
-                      disabled={!cookieStatus?.hasCookies && !twitchTokenInput}
-                      className="p-2 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-30"
-                      title="Clear all stored cookies & credentials"
-                    >
-                      <Trash2 size={13} />
-                      <span>Clear Cookies</span>
-                    </button>
-                  </div>
-
-                  {/* Browser Sync */}
-                  <div className="flex flex-col gap-1 pt-1 border-t border-white/5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-gray-400">Direct Browser Sync:</span>
-                      {cookieSyncStatus && (
-                        <span className="text-[10px] font-mono text-amber-300 truncate max-w-[160px]">{cookieSyncStatus}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <CustomDropdown 
-                          value={browserCookies}
-                          options={browserOptions}
-                          onChange={setBrowserCookies}
-                          theme={theme}
-                          variant="glass-dark"
-                          size="sm"
-                          accentColor={accentColor}
-                          className="w-full"
-                        />
-                      </div>
-                      <button
-                        onClick={() => handleSyncBrowserCookies(browserCookies === 'none' ? 'chrome' : browserCookies)}
-                        disabled={isSyncingCookies}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white shrink-0 border border-white/10 cursor-pointer disabled:opacity-50"
-                      >
-                        {isSyncingCookies ? '...' : 'Sync'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 6. Codec Selection */}
-                <div className="flex items-center justify-between mx-2">
-                  <span className="text-[14px] font-medium whitespace-nowrap" style={{ color: theme.textMain }}>Video Codec Priority:</span>
-                  <CustomDropdown 
-                    value={videoCodec}
-                    options={codecOptions}
-                    onChange={setVideoCodec}
-                    theme={theme}
-                    variant="tactile-light"
-                    size="sm"
-                    accentColor={accentColor}
-                  />
-                </div>
-              </>
-            )}
-          </div>
+          {isGifSection ? (
+            <div className="flex flex-col">
+              <SettingRow label="Frame rate" hint="Lower frame rates make smaller files">
+                <CustomDropdown
+                  value={gifFps}
+                  options={[
+                    { value: 'original', label: 'Original' },
+                    { value: '60', label: '60 FPS' }, { value: '50', label: '50 FPS' }, { value: '30', label: '30 FPS' },
+                    { value: '24', label: '24 FPS' }, { value: '15', label: '15 FPS' },
+                  ]}
+                  onChange={setGifFps} theme={theme} size="sm" accentColor={accentColor} minWidth={150}
+                />
+              </SettingRow>
+              <SettingRow label="Resolution">
+                <CustomDropdown
+                  value={gifScale}
+                  options={[
+                    { value: 'original', label: 'Original' },
+                    { value: '1080p', label: '1080p' }, { value: '720p', label: '720p' },
+                    { value: '480p', label: '480p' }, { value: '360p', label: '360p' },
+                  ]}
+                  onChange={setGifScale} theme={theme} size="sm" accentColor={accentColor} minWidth={150}
+                />
+              </SettingRow>
+              <SettingRow label="Dithering" hint="How missing colours are blended in a GIF">
+                <CustomDropdown
+                  value={gifDither}
+                  options={[
+                    { value: 'bayer', label: 'Bayer (pattern)' },
+                    { value: 'sierra', label: 'Sierra (smooth)' },
+                    { value: 'floyd', label: 'Floyd-Steinberg' },
+                    { value: 'none', label: 'None' }
+                  ]}
+                  onChange={setGifDither} theme={theme} size="sm" accentColor={accentColor} minWidth={150}
+                />
+              </SettingRow>
+              <SettingRow label="Sound in looping clips" hint="Keep the audio when making a looping MP4">
+                <Toggle on={gifAudioLoop} onChange={setGifAudioLoop} accent={accentColor} label="Sound in looping clips" />
+              </SettingRow>
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              <SettingRow label="Video quality">
+                <CustomDropdown value={quality} options={qualityOptions} onChange={setQuality} theme={theme} size="sm" accentColor={accentColor} minWidth={170} />
+              </SettingRow>
+              <SettingRow label="Video codec" hint="H.264 plays everywhere, AV1 makes smaller files">
+                <CustomDropdown value={videoCodec} options={codecOptions} onChange={setVideoCodec} theme={theme} size="sm" accentColor={accentColor} minWidth={170} />
+              </SettingRow>
+              <SettingRow icon={<Zap size={16} />} label="Turbo downloads" hint="Downloads in 16 parallel parts, falls back automatically">
+                <Toggle on={turboMode} onChange={setTurboMode} accent={accentColor} label="Turbo downloads" />
+              </SettingRow>
+              <SettingRow icon={<ListPlus size={16} />} label="Split into chapters" hint="One file per chapter, for albums and DJ sets">
+                <Toggle on={splitChapters} onChange={setSplitChapters} accent={accentColor} label="Split into chapters" />
+              </SettingRow>
+              <SettingRow icon={<Shield size={16} />} label="Skip sponsor segments" hint="Cuts sponsor, intro and outro parts (SponsorBlock)">
+                <Toggle on={sponsorBlock} onChange={setSponsorBlock} accent={accentColor} label="Skip sponsor segments" />
+              </SettingRow>
+            </div>
+          )}
         </div>
 
-        {/* Change Folder Action */}
-        <div className="pt-2 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Default Save Folder:</span>
-            {downloadFolder && (
-              <button
-                onClick={() => openDownloadFolder(downloadFolder)}
-                className="text-[11px] text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <FolderOpen size={12} />
-                <span>Open in Explorer</span>
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 px-3 py-2 rounded-xl bg-black/40 border border-white/5 text-[11px] font-mono text-gray-300 truncate" title={downloadFolder || 'Downloads (Default)'}>
-              {downloadFolder || 'Downloads (Default)'}
-            </div>
-            <button 
-              onClick={changeDownloadFolder} 
-              className="py-2 px-3.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-white/10 hover:bg-white/10 transition-all shrink-0 cursor-pointer"
-              style={{ color: theme.textMain }}
-            >
-              <FolderOpen size={14} style={{ color: accentColor }} />
-              <span>Browse</span>
-            </button>
-          </div>
+        <div className="pt-4">
+          <FolderField folder={downloadFolder} onChange={changeDownloadFolder} onOpen={openDownloadFolder} accent={accentColor} />
         </div>
       </div>
 
-      {/* Right Panel: Download History & Wi-Fi Share */}
-      <div className="flex-1 rounded-[20px] p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelInner }}>
-        <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[22px] font-bold" style={{ color: theme.textMain }}>Download History</h2>
-            <span className="text-xs font-mono opacity-60">{(displayedHistory || []).length} items</span>
+      {/* Right: history, plus sign-in for the download sections */}
+      <div className="flex-1 rounded-card p-6 flex flex-col min-w-0" style={{ backgroundColor: theme.panelInner }}>
+        <PanelTitle aside={!isGifSection ? (
+          <div className="flex p-1 rounded-control bg-[#17171d] border border-white/[0.06]" role="tablist">
+            {([['history', 'History'], ['signin', 'Sign-in']] as const).map(([key, label]) => (
+              <button
+                key={key} role="tab" aria-selected={rightTab === key} onClick={() => setRightTab(key)}
+                className={`px-3 py-1 rounded-chip text-xs font-bold transition-colors flex items-center gap-1.5 ${rightTab === key ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                {label}
+                {key === 'signin' && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ytSignedIn ? '#10B981' : '#6b6c78' }} />}
+              </button>
+            ))}
           </div>
+        ) : <span className="text-xs font-mono text-gray-500">{(displayedHistory || []).length} items</span>}>
+          {rightTab === 'signin' && !isGifSection ? 'Sign-in & cookies' : 'History'}
+        </PanelTitle>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-2 pr-1 max-h-[410px]">
-            {displayedHistory && displayedHistory.length > 0 ? (
-              displayedHistory.map((item: any, index: number) => (
-                <div 
-                  key={index} 
-                  className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between gap-3 group hover:bg-white/10 transition-colors"
+        {rightTab === 'signin' && !isGifSection ? (
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 flex flex-col gap-5">
+            {/* Status */}
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-control bg-white/[0.04] border border-white/[0.06]">
+              <Cookie size={16} className={cookieStatus?.hasCookies ? 'text-emerald-400' : 'text-gray-500'} />
+              <span className="text-[13px] text-[#D9D9D9] truncate">
+                {cookieStatus?.hasCookies ? cookieStatus.summary : 'No cookies stored. Needed only for members-only, age-restricted or sub-only videos.'}
+              </span>
+            </div>
+
+            {/* Browser sync */}
+            <div className="flex flex-col gap-2">
+              <FieldLabel>Copy login from a browser</FieldLabel>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <CustomDropdown value={browserCookies} options={browserOptions} onChange={setBrowserCookies} theme={theme} accentColor={accentColor} className="w-full" align="left" />
+                </div>
+                <button
+                  onClick={() => handleSyncBrowserCookies(browserCookies === 'none' ? 'chrome' : browserCookies)}
+                  disabled={isSyncingCookies}
+                  className="px-4 py-2 rounded-control text-xs font-bold uppercase tracking-wider text-white shrink-0 transition-opacity disabled:opacity-50"
+                  style={{ backgroundColor: accentColor }}
                 >
-                  <div className="flex flex-col truncate flex-1">
-                    <span className="text-xs font-bold text-white truncate" title={item.filename}>{item.filename}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] font-mono opacity-50">{item.date}</span>
-                      {item.type && (
-                        <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-white/10 text-gray-300">
-                          {item.type}
-                        </span>
-                      )}
+                  {isSyncingCookies ? 'Syncing…' : 'Sync'}
+                </button>
+              </div>
+              <span className="text-[11px] text-gray-400">Close the browser first, it locks its cookie database while running. Only youtube.com cookies are kept.</span>
+              {cookieSyncStatus && <span className="text-[12px] text-amber-300">{cookieSyncStatus}</span>}
+            </div>
+
+            {/* Cookie file */}
+            <div className="flex flex-col gap-2">
+              <FieldLabel>Cookie file</FieldLabel>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleImportCookiesFile} disabled={isImportingCookies}
+                  className="flex-1 px-3 py-2 rounded-control border border-white/[0.08] hover:bg-white/10 text-[#D9D9D9] font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                  title="Import a cookies.txt file exported from your browser"
+                >
+                  <FileText size={14} />
+                  <span>{isImportingCookies ? 'Importing…' : 'Import cookies.txt'}</span>
+                </button>
+                <button
+                  onClick={handleClearCookies} disabled={!cookieStatus?.hasCookies && !twitchTokenInput}
+                  className="px-3 py-2 rounded-control border border-red-500/25 hover:bg-red-500/15 text-red-400 font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-30"
+                  title="Delete all stored cookies and the Twitch token"
+                >
+                  <Trash2 size={14} />
+                  <span>Clear all</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Twitch token */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor="twitch-token">Twitch token (sub-only VODs)</FieldLabel>
+                <button onClick={() => setShowTwitchHelp(!showTwitchHelp)} className="text-[11px] text-gray-400 hover:text-white flex items-center gap-1">
+                  <HelpCircle size={12} /><span>How to get it</span>
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="twitch-token"
+                  type={showTokenText ? "text" : "password"}
+                  value={twitchTokenInput}
+                  onChange={e => setTwitchTokenInput(e.target.value)}
+                  placeholder="Paste your auth-token"
+                  className={`${fieldClass} font-mono`}
+                />
+                <button onClick={() => setShowTokenText(!showTokenText)} className="p-2 rounded-control border border-white/[0.08] hover:bg-white/10 text-gray-300 shrink-0" title={showTokenText ? "Hide token" : "Show token"}>
+                  {showTokenText ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+                <button
+                  onClick={handleSaveTwitchToken} disabled={isSavingToken}
+                  className="px-4 py-2 rounded-control text-xs font-bold uppercase tracking-wider border border-white/[0.08] hover:bg-white/10 text-[#D9D9D9] shrink-0 disabled:opacity-50"
+                >
+                  {isSavingToken ? '…' : 'Save'}
+                </button>
+              </div>
+              {showTwitchHelp && (
+                <ol className="text-[12px] text-gray-300 leading-relaxed list-decimal pl-5 flex flex-col gap-0.5">
+                  <li>Open <span className="font-mono">twitch.tv</span> in a browser where you're signed in with the sub.</li>
+                  <li>Press <kbd className="px-1 rounded-chip bg-white/10 font-mono">F12</kbd> and open <strong>Application</strong> (<strong>Storage</strong> in Firefox).</li>
+                  <li>Under <strong>Cookies</strong>, pick <span className="font-mono">https://www.twitch.tv</span>.</li>
+                  <li>Copy the value of <span className="font-mono text-white">auth-token</span> and paste it here.</li>
+                </ol>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar flex flex-col gap-2 pr-1">
+              {displayedHistory && displayedHistory.length > 0 ? (
+                displayedHistory.map((item: any, index: number) => (
+                  <div key={index} className="px-3 py-2.5 rounded-control bg-white/[0.04] border border-white/[0.06] flex items-center justify-between gap-3 hover:bg-white/[0.08] transition-colors">
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-[13px] font-semibold text-white truncate" title={item.filename}>{item.filename}</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {item.type && <span className="text-[10px] font-bold uppercase px-1.5 py-px rounded-chip bg-white/10 text-gray-300">{item.type}</span>}
+                        <span className="text-[11px] font-mono text-gray-500">{item.date}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => onShareFile(item.filename)} className="p-2 rounded-chip text-gray-400 hover:bg-white/10 hover:text-white transition-colors" title="Send to your phone over Wi-Fi (QR code)">
+                        <Smartphone size={15} />
+                      </button>
+                      <button onClick={() => fetch('/api/open_folder', { method: 'POST' })} className="p-2 rounded-chip text-gray-400 hover:bg-white/10 hover:text-white transition-colors" title="Open the download folder">
+                        <FolderOpen size={15} />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Wi-Fi Share Button */}
-                    <button 
-                      onClick={() => onShareFile(item.filename)}
-                      className="p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 hover:text-white transition-all shadow-sm"
-                      title="Share to Phone via Local Wi-Fi QR Code"
-                    >
-                      <Smartphone size={14} />
-                    </button>
-                    {/* Open in Explorer */}
-                    <button 
-                      onClick={() => fetch('/api/open_folder', { method: 'POST' })}
-                      className="p-2 rounded-lg bg-white/5 hover:bg-white/15 text-gray-300 hover:text-white transition-all"
-                      title="Open in Windows Explorer"
-                    >
-                      <FolderOpen size={14} />
-                    </button>
-                  </div>
+                ))
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 text-gray-500">
+                  <History size={28} className="opacity-50" />
+                  <span className="text-[13px]">Nothing downloaded yet.</span>
                 </div>
-              ))
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-xs text-gray-500 italic py-16">
-                No recent downloads.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="text-[11px] font-mono text-center opacity-40 pt-2 border-t border-white/5">
-          Levi's YouTube Downloader Pro · v1.1.0-dev (Turbo Enabled)
-        </div>
+              )}
+            </div>
+            <div className="text-[11px] font-mono text-center text-gray-500 pt-3 mt-3 border-t border-white/[0.06]">
+              Levi's YouTube Downloader Pro · v1.1.0-dev
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2606,27 +2253,27 @@ function LogView({ theme, activeSection, setActiveView }: any) {
   const accentColor = activeSection === 'live_dvr' ? theme.liveAccent : activeSection === 'gif' ? theme.gifAccent : theme.accent;
 
   return (
-    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelOuter }}>
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <h2 className="text-[24px] font-bold text-white">Stream & Process Log</h2>
-            <div className="flex gap-1.5 p-1 rounded-xl bg-black/40 border border-white/5">
+            <div className="flex gap-1.5 p-1 rounded-control bg-black/40 border border-white/5">
               <button 
                 onClick={() => setFilter('all')} 
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${filter === 'all' ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white'}`}
+                className={`px-3 py-1 rounded-chip text-xs font-bold transition-all ${filter === 'all' ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white'}`}
               >
                 All Logs ({logs.length})
               </button>
               <button 
                 onClick={() => setFilter('engine')} 
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${filter === 'engine' ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white'}`}
+                className={`px-3 py-1 rounded-chip text-xs font-bold transition-all ${filter === 'engine' ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white'}`}
               >
                 Engine Stream
               </button>
               <button 
                 onClick={() => setFilter('errors')} 
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${filter === 'errors' ? 'bg-red-500/20 text-red-400' : 'text-gray-400 hover:text-white'}`}
+                className={`px-3 py-1 rounded-chip text-xs font-bold transition-all ${filter === 'errors' ? 'bg-red-500/20 text-red-400' : 'text-gray-400 hover:text-white'}`}
               >
                 Errors Only
               </button>
@@ -2635,7 +2282,7 @@ function LogView({ theme, activeSection, setActiveView }: any) {
 
           <button 
             onClick={handleCopyLogs}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-control text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white flex items-center gap-1.5"
           >
             <Copy size={14} />
             <span>{copied ? 'Copied!' : 'Copy All'}</span>
@@ -2643,7 +2290,7 @@ function LogView({ theme, activeSection, setActiveView }: any) {
         </div>
 
         {/* Terminal Window */}
-        <div className="w-full h-[450px] p-4 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs overflow-y-auto custom-scrollbar flex flex-col gap-1 shadow-inner select-text">
+        <div className="w-full h-[450px] p-4 rounded-card bg-black/70 border border-white/10 font-mono text-xs overflow-y-auto custom-scrollbar flex flex-col gap-1 shadow-inner select-text">
           {filteredLogs.length > 0 ? (
             filteredLogs.map((log, index) => {
               const isErr = log.toLowerCase().includes('error') || log.toLowerCase().includes('critical');
@@ -2692,12 +2339,12 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
   }, []);
 
   return (
-    <div className="w-[1050px] h-[580px] rounded-[24px] shadow-2xl p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelOuter }}>
+    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelOuter }}>
       <div>
         <h2 className="text-[24px] font-bold text-white mb-2">Engine Updater Pipeline</h2>
         <p className="text-xs text-gray-400 mb-4">Fetching the latest upstream `yt-dlp` core binaries and dependencies...</p>
 
-        <div className="w-full h-[410px] p-4 rounded-2xl bg-black/70 border border-white/10 font-mono text-xs overflow-y-auto custom-scrollbar flex flex-col gap-1 shadow-inner select-text">
+        <div className="w-full h-[410px] p-4 rounded-card bg-black/70 border border-white/10 font-mono text-xs overflow-y-auto custom-scrollbar flex flex-col gap-1 shadow-inner select-text">
           {logs.map((log, i) => (
             <div key={i} className="text-gray-300">
               <span className="opacity-40 mr-2">[{i + 1}]</span>
@@ -2711,7 +2358,7 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
         <button 
           onClick={() => setActiveView('main')}
           disabled={!isDone}
-          className="py-3 px-8 rounded-xl font-bold text-sm uppercase tracking-wider text-white bg-white/10 hover:bg-white/20 disabled:opacity-40 transition-all"
+          className="py-3 px-8 rounded-control font-bold text-sm uppercase tracking-wider text-white bg-white/10 hover:bg-white/20 disabled:opacity-40 transition-all"
         >
           {isDone ? 'Return to Downloader' : 'Updating in Progress...'}
         </button>
@@ -2742,7 +2389,7 @@ function PrenameView({ theme, setActiveView, customName, setCustomName }: any) {
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="w-full max-w-[500px] p-7 rounded-[28px] shadow-2xl flex flex-col gap-5 relative border border-white/10"
+        className="w-full max-w-[500px] p-7 rounded-panel shadow-2xl flex flex-col gap-5 relative border border-white/10"
         style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
       >
         <button 
@@ -2764,21 +2411,21 @@ function PrenameView({ theme, setActiveView, customName, setCustomName }: any) {
           value={tempName}
           onChange={e => setTempName(e.target.value)}
           placeholder="e.g. Favorite_Song_Remix_2026..."
-          className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/15 text-sm text-white font-medium outline-none shadow-inner"
+          className="w-full px-4 py-3 rounded-control bg-black/50 border border-white/15 text-sm text-white font-medium outline-none shadow-inner"
           autoFocus
         />
 
         <div className="flex gap-3 mt-2">
           <button 
             onClick={handleSave}
-            className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-wider text-white shadow-lg transition-all active:scale-[0.98]"
+            className="flex-1 py-3 rounded-control font-bold text-sm uppercase tracking-wider text-white shadow-lg transition-all active:scale-[0.98]"
             style={{ backgroundColor: theme.accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 #99001b` }}
           >
             Apply Name
           </button>
           <button 
             onClick={() => { setCustomName(''); setActiveView('main'); }}
-            className="px-4 py-3 rounded-xl font-bold text-sm text-gray-400 hover:text-white border border-white/10 hover:bg-white/5 transition-all"
+            className="px-4 py-3 rounded-control font-bold text-sm text-gray-400 hover:text-white border border-white/10 hover:bg-white/5 transition-all"
           >
             Clear
           </button>

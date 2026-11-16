@@ -79,32 +79,14 @@ export default function CustomDropdown({
   let triggerStyles: React.CSSProperties = {};
   let triggerClasses = '';
 
-  if (variant === 'tactile-light') {
+  if (variant === 'tactile-light' || variant === 'tactile-dark' || variant === 'glass-dark') {
+    // "Dark field": every dropdown matches the app's input fields; the section accent marks it while open
     triggerStyles = {
-      backgroundColor: theme?.btnLightBg || '#e2e2e8',
-      color: theme?.btnLightText || '#2c2d33',
-      boxShadow: isOpen
-        ? 'inset 0 2px 4px rgba(0,0,0,0.2)'
-        : `inset 0 1px 0 rgba(255,255,255,0.6), 0 3px 0 ${theme?.btnLightBorder || '#c0c0c6'}, 0 4px 6px rgba(0,0,0,0.15)`,
+      backgroundColor: theme?.fieldBg || '#17171d',
+      borderColor: isOpen ? `${accent}99` : 'rgba(255,255,255,0.08)',
+      color: theme?.textMain || '#D9D9D9',
     };
-    triggerClasses = 'font-bold tracking-wide rounded-lg flex items-center justify-between transition-all select-none';
-  } else if (variant === 'tactile-dark') {
-    triggerStyles = {
-      backgroundColor: theme?.btnDarkBg || '#2a2b36',
-      color: theme?.btnDarkText || '#D9D9D9',
-      borderColor: 'rgba(255,255,255,0.08)',
-      boxShadow: isOpen
-        ? 'inset 0 2px 4px rgba(0,0,0,0.4)'
-        : `inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 0 ${theme?.btnDarkBorder || '#1b1c23'}, 0 6px 10px rgba(0,0,0,0.2)`,
-    };
-    triggerClasses = 'font-bold tracking-wide rounded-xl border flex items-center justify-between transition-all select-none';
-  } else if (variant === 'glass-dark') {
-    triggerStyles = {
-      backgroundColor: 'rgba(0,0,0,0.4)',
-      borderColor: 'rgba(255,255,255,0.12)',
-      color: theme?.textMain || '#ffffff',
-    };
-    triggerClasses = 'font-medium rounded-xl border flex items-center justify-between transition-all select-none hover:border-white/20';
+    triggerClasses = 'font-semibold rounded-control border flex items-center justify-between transition-colors select-none hover:border-white/20';
   } else if (variant === 'pill') {
     triggerStyles = {
       backgroundColor: 'rgba(255,255,255,0.06)',
@@ -115,10 +97,10 @@ export default function CustomDropdown({
   }
 
   // Size styling
-  let sizeClasses = 'px-3 py-1.5 text-sm gap-2';
+  let sizeClasses = 'px-3 py-2 text-sm gap-2';
   let chevronSize = 16;
   if (size === 'sm') {
-    sizeClasses = 'px-2.5 py-1 text-xs gap-1.5';
+    sizeClasses = 'px-3 py-1.5 text-xs gap-1.5';
     chevronSize = 14;
   } else if (size === 'lg') {
     sizeClasses = 'px-4 py-2.5 text-base gap-3';
@@ -135,13 +117,13 @@ export default function CustomDropdown({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full ${sizeClasses} ${triggerClasses} active:translate-y-[1px]`}
+        className={`w-full ${sizeClasses} ${triggerClasses}`}
         style={triggerStyles}
       >
         <span className="truncate">{displayLabel}</span>
         <ChevronDown
           size={chevronSize}
-          className={`shrink-0 transition-transform duration-200 opacity-70 ${isOpen ? 'rotate-180 opacity-100' : ''}`}
+          className={`shrink-0 transition-transform duration-200 opacity-50 ${isOpen ? 'rotate-180 opacity-100' : ''}`}
           style={isOpen ? { color: accent } : {}}
         />
       </button>
@@ -154,7 +136,7 @@ export default function CustomDropdown({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: dropUp ? 6 : -6, scale: 0.96 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className={`absolute z-[300] min-w-[200px] w-max max-w-[380px] p-1.5 rounded-2xl shadow-2xl border backdrop-blur-2xl ${
+            className={`absolute z-[300] min-w-[200px] w-max max-w-[380px] p-1.5 rounded-card shadow-2xl border backdrop-blur-2xl ${
               dropUp ? 'bottom-full mb-2' : 'top-full mt-2'
             } ${align === 'right' ? 'right-0' : 'left-0'}`}
             style={{
@@ -174,7 +156,7 @@ export default function CustomDropdown({
                       onChange(option.value);
                       setIsOpen(false);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between gap-3 transition-all ${
+                    className={`w-full text-left px-3 py-2 rounded-control text-xs font-semibold flex items-center justify-between gap-3 transition-all ${
                       isSelected
                         ? 'bg-white/15 text-white font-bold shadow-inner'
                         : 'text-gray-300 hover:bg-white/10 hover:text-white'
@@ -192,7 +174,7 @@ export default function CustomDropdown({
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       {option.badge && (
                         <span
-                          className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider bg-white/10"
+                          className="px-1.5 py-0.5 rounded-chip text-[9px] uppercase font-bold tracking-wider bg-white/10"
                           style={{ color: accent }}
                         >
                           {option.badge}
