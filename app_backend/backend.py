@@ -9,7 +9,6 @@ import re
 import urllib.request
 import urllib.parse
 import zipfile
-import io
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, abort
 import ipaddress
@@ -238,7 +237,8 @@ def initialize_assets():
     if not os.path.exists(target_ytdlp):
         try:
             app_logs.append("Fetching yt-dlp core binary...")
-            urllib.request.urlretrieve("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe", target_ytdlp)
+            urllib.request.urlretrieve("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe", target_ytdlp + ".part")
+            os.replace(target_ytdlp + ".part", target_ytdlp)
             app_logs.append("yt-dlp engine downloaded successfully.")
         except Exception as e:
             app_logs.append(f"Error downloading yt-dlp: {e}")
@@ -249,13 +249,23 @@ def initialize_assets():
             app_logs.append("Fetching FFmpeg & FFprobe engine binaries...")
             url = "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                z = zipfile.ZipFile(io.BytesIO(resp.read()))
-                for name in z.namelist():
-                    base = os.path.basename(name)
-                    if base in ('ffmpeg.exe', 'ffprobe.exe'):
-                        with open(os.path.join(TOOLS_DIR, base), 'wb') as f:
-                            f.write(z.read(name))
+            # Stream the ~150 MB archive to disk instead of holding it in memory
+            zip_path = os.path.join(TOOLS_DIR, "_ffmpeg_download.zip")
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp, open(zip_path, 'wb') as out:
+                    shutil.copyfileobj(resp, out, 1024 * 1024)
+                with zipfile.ZipFile(zip_path) as z:
+                    for name in z.namelist():
+                        base = os.path.basename(name)
+                        if base in ('ffmpeg.exe', 'ffprobe.exe'):
+                            # write under a temp name: a half-written ffmpeg.exe would skip this download next start
+                            part = os.path.join(TOOLS_DIR, base + ".part")
+                            with z.open(name) as src, open(part, 'wb') as dst:
+                                shutil.copyfileobj(src, dst, 1024 * 1024)
+                            os.replace(part, os.path.join(TOOLS_DIR, base))
+            finally:
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
             app_logs.append("FFmpeg engine installed successfully.")
         except Exception as e:
             app_logs.append(f"Error downloading FFmpeg: {e}")
@@ -386,15 +396,39 @@ def parse_cookies_file_info(cookie_path=COOKIES_STORED):
             info["summary"] = f"Error reading cookies: {e}"
     return info
 
+def write_json_atomic(path, data):
+    """Write to a temp file and swap it in, so a crash mid-write can't leave a truncated JSON file."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f)
+    os.replace(tmp, path)
+
+
+_settings_lock = threading.Lock()
+
+
+def load_settings():
+    try:
+        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def update_settings(changes):
+    """Read-modify-write under a lock so two requests can't drop each other's keys."""
+    with _settings_lock:
+        data = load_settings()
+        data.update(changes)
+        write_json_atomic(SETTINGS_FILE, data)
+        return data
+
+
 def get_cookie_status_dict():
     info = parse_cookies_file_info(COOKIES_STORED)
-    settings = {}
-    if os.path.exists(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                settings = json.load(f)
-        except:
-            pass
+    settings = load_settings()
     info["twitchToken"] = settings.get("twitchToken", "")
     info["browserCookies"] = settings.get("browserCookies", "none")
     return info
@@ -451,23 +485,48 @@ def check_cookies():
         "cookies.txt", "www.youtube.com_cookies.txt", "www.twitch.tv_cookies.txt"
     ]
     
+    # Only files newer than the stored jar: the export is left where it is (no more deleting things from
+    # Downloads), and this keeps it from being re-imported on every download.
+    stored_mtime = os.path.getmtime(COOKIES_STORED) if os.path.exists(COOKIES_STORED) else 0
     found_file = None
     for name in candidate_names:
         p = os.path.join(USER_DOWNLOADS, name)
-        if os.path.exists(p) and os.path.getsize(p) > 0:
+        if os.path.exists(p) and os.path.getsize(p) > 0 and os.path.getmtime(p) > stored_mtime:
             found_file = p
             break
-            
+
     if found_file:
         try:
-            shutil.copy2(found_file, COOKIES_STORED)
+            with open(found_file, 'r', encoding='utf-8', errors='ignore') as f:
+                incoming = f.read()
+            if not cookie_rows(incoming):
+                return  # not a Netscape cookies.txt (e.g. some unrelated "cookies.txt")
+            existing = ''
+            if os.path.exists(COOKIES_STORED):
+                with open(COOKIES_STORED, 'r', encoding='utf-8', errors='ignore') as f:
+                    existing = f.read()
+            with open(COOKIES_STORED, 'w', encoding='utf-8') as f:
+                f.write(merge_cookie_jars(existing, incoming))
             app_logs.append(f"Auto-imported cookies from {os.path.basename(found_file)} into safe storage!")
-            try:
-                os.remove(found_file)
-            except:
-                pass
         except Exception as e:
             app_logs.append(f"Cookie auto-import warning: {e}")
+
+
+def merge_cookie_jars(existing, incoming):
+    """Incoming rows replace stored rows for the same domains; rows for other domains (e.g. a YouTube
+    sync when a Twitch export arrives) are kept instead of being overwritten."""
+    def domain(line):
+        d = line[len("#HttpOnly_"):] if line.startswith("#HttpOnly_") else line
+        return d.split("\t", 1)[0].lstrip('.').lower()
+
+    def rows(content):
+        return [l for l in content.splitlines()
+                if len(l.split("\t")) >= 7 and (l.startswith("#HttpOnly_") or not l.startswith("#"))]
+
+    new_rows = rows(incoming)
+    new_domains = {domain(l) for l in new_rows}
+    kept = [l for l in rows(existing) if domain(l) not in new_domains]
+    return "\n".join(["# Netscape HTTP Cookie File"] + kept + new_rows) + "\n"
 
 # --- HISTORY DATABASE FUNCTIONS ---
 def load_history():
@@ -481,23 +540,23 @@ def load_history():
 
 def save_history(history_list):
     try:
-        if not os.path.exists(TOOLS_DIR):
-            os.makedirs(TOOLS_DIR)
-        with open(HISTORY_FILE, 'w') as f:
-            json.dump(history_list[:30], f)  # Keep up to last 30 entries
+        write_json_atomic(HISTORY_FILE, history_list[:30])  # Keep up to last 30 entries
     except Exception as e:
         app_logs.append(f"History save error: {e}")
+
+_history_lock = threading.Lock()
 
 def add_history_entry(filename, format_type="MP4"):
     try:
         date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-        current_hist = load_history()
-        current_hist.insert(0, {
-            "date": date_str,
-            "filename": filename,
-            "type": format_type
-        })
-        save_history(current_hist)
+        with _history_lock:
+            current_hist = load_history()
+            current_hist.insert(0, {
+                "date": date_str,
+                "filename": filename,
+                "type": format_type
+            })
+            save_history(current_hist)
     except Exception as e:
         app_logs.append(f"Add history error: {e}")
 
@@ -541,6 +600,14 @@ def restrict_access():
     if not _is_ip_or_localhost(host):
         abort(403)
     if request.remote_addr in _LOOPBACK_ADDRS:
+        # A website open in the user's browser can still *send* requests to 127.0.0.1 (it just can't read
+        # the answers). Browsers label those, so refuse API calls that come from another origin.
+        if request.path.startswith('/api/'):
+            origin = request.headers.get('Origin')
+            if origin and urllib.parse.urlparse(origin).netloc != request.host:
+                abort(403)
+            if request.headers.get('Sec-Fetch-Site') in ('cross-site', 'same-site'):
+                abort(403)
         return None
     # LAN clients (phones scanning the share QR code) may only download explicitly shared files
     if request.path.startswith('/api/download_file/'):
@@ -562,6 +629,15 @@ def sanitize_filename(name):
     cleaned = _INVALID_FILENAME_CHARS.sub('', name or '').strip().rstrip('. ')
     return cleaned
 
+QUALITY_HEIGHTS = {"1440p": 1440, "1080p": 1080, "720p": 720, "480p": 480}
+
+def quality_format(quality):
+    """yt-dlp -f selector for a quality label; Best, 4K and anything unknown get the best available."""
+    h = QUALITY_HEIGHTS.get(quality)
+    if not h:
+        return "bestvideo+bestaudio/best"
+    return f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/best"
+
 def is_valid_media_url(url):
     """A "URL" starting with '-' would be parsed by yt-dlp as an option (e.g. --exec)."""
     return bool(url) and not url.startswith('-')
@@ -579,34 +655,25 @@ def serve(path):
 def handle_settings():
     global download_dir
     if request.method == 'GET':
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                data = json.load(f)
-                if "downloadDir" in data and os.path.exists(data["downloadDir"]):
-                    download_dir = data["downloadDir"]
-                data["downloadDir"] = download_dir
-                return jsonify(data)
-        except:
+        data = load_settings()
+        if not data:
             return jsonify({
                 "downloadDir": download_dir,
                 "turboMode": True,
                 "splitChapters": False,
                 "twitchToken": ""
             })
+        if "downloadDir" in data and os.path.exists(data["downloadDir"]):
+            download_dir = data["downloadDir"]
+        data["downloadDir"] = download_dir
+        return jsonify(data)
     else:
-        new_data = request.json or {}
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                data = json.load(f)
-        except:
-            data = {}
-        data.update(new_data)
+        new_data = request.get_json(silent=True) or {}
+        update_settings(new_data)
         if "downloadDir" in new_data and os.path.exists(new_data["downloadDir"]):
             download_dir = new_data["downloadDir"]
         if "twitchToken" in new_data:
             update_twitch_auth_cookie(new_data["twitchToken"])
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(data, f)
         return jsonify({"success": True})
 
 @app.route('/api/history', methods=['GET'])
@@ -624,23 +691,22 @@ def api_change_folder():
         result = window.create_file_dialog(webview.FOLDER_DIALOG)
         if result and len(result) > 0:
             download_dir = result[0]
-            try:
-                with open(SETTINGS_FILE, 'r') as f:
-                    data = json.load(f)
-            except:
-                data = {}
-            data["downloadDir"] = download_dir
-            with open(SETTINGS_FILE, 'w') as f:
-                json.dump(data, f)
+            update_settings({"downloadDir": download_dir})
             return jsonify({"success": True, "folder": download_dir})
     return jsonify({"success": False, "folder": download_dir})
 
 @app.route('/api/open_folder', methods=['POST'])
 def api_open_folder():
     try:
-        folder = request.json.get('folder', download_dir) if request.json else download_dir
+        # get_json(silent=True): the Settings button posts without a JSON body, which Flask 3 rejects with 415
+        folder = (request.get_json(silent=True) or {}).get('folder') or download_dir
+        # os.startfile *runs* files, so only ever hand it a directory
+        if os.path.isfile(folder):
+            folder = os.path.dirname(folder)
         if not os.path.exists(folder):
             os.makedirs(folder, exist_ok=True)
+        if not os.path.isdir(folder):
+            return jsonify({"success": False, "error": "Not a folder"})
         if os.name == 'nt':
             os.startfile(folder)
         else:
@@ -662,7 +728,7 @@ def api_select_local_file():
 
 @app.route('/api/probe_media', methods=['POST'])
 def api_probe_media():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     path_or_url = data.get('target', '')
     if not path_or_url:
         return jsonify({"success": False, "error": "No target provided"})
@@ -787,18 +853,10 @@ def api_import_cookies():
 
 @app.route('/api/save_twitch_token', methods=['POST'])
 def api_save_twitch_token():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     token = data.get('token', '').strip()
     try:
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                settings = json.load(f)
-        except:
-            settings = {}
-        settings['twitchToken'] = token
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(settings, f)
-            
+        update_settings({'twitchToken': token})
         update_twitch_auth_cookie(token)
         status = get_cookie_status_dict()
         if token:
@@ -814,14 +872,8 @@ def api_clear_cookies():
     try:
         if os.path.exists(COOKIES_STORED):
             os.remove(COOKIES_STORED)
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                settings = json.load(f)
-            settings['twitchToken'] = ''
-            with open(SETTINGS_FILE, 'w') as f:
-                json.dump(settings, f)
-        except:
-            pass
+        if os.path.exists(SETTINGS_FILE):
+            update_settings({'twitchToken': ''})
         app_logs.append("Stored cookies and credentials cleared.")
         return jsonify({"success": True, "status": get_cookie_status_dict()})
     except Exception as e:
@@ -829,7 +881,7 @@ def api_clear_cookies():
 
 @app.route('/api/sync_cookies', methods=['POST'])
 def api_sync_cookies():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     browser = str(data.get('browser', 'chrome')).lower()
     spec = browser_spec(browser)
     label = BROWSER_LABELS.get(browser, browser)
@@ -934,7 +986,7 @@ def api_download_file(filename):
 @app.route('/api/record_live', methods=['POST'])
 def api_record_live():
     global live_recording_state, live_process
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     url = data.get('url', '').strip()
     quality = data.get('quality', 'Best')
     live_from_start = data.get('liveFromStart', False)
@@ -1001,14 +1053,7 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
         else:
             cmd.append("--no-live-from-start")
 
-        if quality == '1080p':
-            fmt = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
-        elif quality == '720p':
-            fmt = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-        elif quality == '480p':
-            fmt = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
-        else:
-            fmt = "bestvideo+bestaudio/best"
+        fmt = quality_format(quality)
 
         cmd.extend([
             # before_dl: a plain `--print filename` implies --simulate, so nothing would be recorded
@@ -1147,7 +1192,7 @@ def api_queue_handler():
     if request.method == 'GET':
         return jsonify({"queue": download_queue, "isProcessing": queue_worker_active})
     elif request.method == 'POST':
-        data = request.json or {}
+        data = request.get_json(silent=True) or {}
         items = [it for it in data.get('items', []) if is_valid_media_url(str(it.get('url', '')).strip())]
         for it in items:
             it['customName'] = sanitize_filename(it.get('customName', ''))
@@ -1205,7 +1250,7 @@ def process_queue_worker():
 
 @app.route('/api/download', methods=['POST'])
 def api_download():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     url = data.get('url', '').strip()
     fmt = data.get('format', 'mp4')
     quality = data.get('quality', 'Best')
@@ -1243,7 +1288,7 @@ def api_download():
 
 @app.route('/api/convert_local', methods=['POST'])
 def api_convert_local():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     input_file = data.get('filePath', '').strip()
     target_format = data.get('format', 'gif')
     custom_name = sanitize_filename(data.get("customName", ""))
@@ -1269,7 +1314,8 @@ def api_convert_local():
     return jsonify({"success": True})
 
 # --- CORE PROCESS RUNNER ---
-def run_process(cmd_list):
+def run_process(cmd_list, on_line=None):
+    """on_line sees every output line, including ones that later fall out of the 300-line app_logs window."""
     global app_logs, current_process
     my_env = os.environ.copy()
     my_env["PATH"] += os.pathsep + TOOLS_DIR
@@ -1300,6 +1346,8 @@ def run_process(cmd_list):
                 app_logs.append(clean_line)
                 if len(app_logs) > 300:
                     app_logs.pop(0)
+                if on_line:
+                    on_line(clean_line)
 
         current_process.wait()
         ret_code = current_process.returncode
@@ -1309,47 +1357,84 @@ def run_process(cmd_list):
         current_process = None
     return ret_code
 
+class OutputFileTracker:
+    """Collects the final file of each item from yt-dlp's output. Later stages win per item: an MP3 download
+    first prints the source "Destination: x.webm", then "[ExtractAudio] Destination: x.mp3"."""
+    VALID_EXTS = ('.mp3', '.mp4', '.wav', '.flac', '.webm', '.gif', '.m4a', '.mkv')
+
+    def __init__(self):
+        self._by_item = {}  # name without extension (or .fNNN part) -> final filename, in download order
+
+    def feed(self, line):
+        fname = None
+        if "[download] Destination:" in line or "[ExtractAudio] Destination:" in line:
+            fname = line.split("Destination: ", 1)[-1].strip()
+        elif "has already been downloaded" in line:
+            fname = line.replace("[download] ", "").split(" has already")[0].strip()
+        elif "[Merger] Merging formats into" in line:
+            parts = line.split('"')
+            fname = parts[1].strip() if len(parts) > 1 else None
+        # [ChapterSplit] lines are left out on purpose: one album would flood the 30-entry history
+        if not fname:
+            return
+        fname = fname.replace("\\", "/").split("/")[-1]
+        low = fname.lower()
+        if re.search(r'\.f\d+\.[a-z0-9]+$', low) or not low.endswith(self.VALID_EXTS):
+            # format fragment (.f137.mp4) or a temp/thumbnail file: still marks the item, but isn't the result
+            key = re.sub(r'(\.f\d+)?\.[a-z0-9]+$', '', fname, flags=re.I)
+            self._by_item.setdefault(key, None)
+            return
+        self._by_item[os.path.splitext(fname)[0]] = fname
+
+    def files(self):
+        return [f for f in self._by_item.values() if f]
+
+
 # --- HIGH-QUALITY VIDEO TO GIF / CONVERSION ENGINE ---
+# Aspect-ratio crops take the largest box of that ratio that fits, so a source narrower than the
+# ratio no longer asks ffmpeg for a crop wider than the frame (which made the render fail).
+CROP_FILTERS = {
+    '1:1': "crop=min(iw\\,ih):min(iw\\,ih)",
+    '9:16': "crop=min(iw\\,ih*9/16):min(ih\\,iw*16/9)",
+    '4:3': "crop=min(iw\\,ih*4/3):min(ih\\,iw*3/4)",
+    # Smart Blur Background: blurred, zoomed copy behind the original
+    '16:9_blur': "split[v0][v1];[v0]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bg];[v1]scale=-1:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2",
+    '9:16_blur': "split[v0][v1];[v0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[v1]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2",
+}
+SCALE_HEIGHTS = {"1080p": 1080, "720p": 720, "480p": 480, "360p": 360}
+
+
+def crop_fps_scale_filters(crop_val, fps_val, scale_val):
+    """The crop -> fps -> Lanczos scale chain shared by the GIF and WebP renders."""
+    filters = []
+    if crop_val in CROP_FILTERS:
+        filters.append(CROP_FILTERS[crop_val])
+    if fps_val and fps_val != "original":
+        filters.append(f"fps={fps_val}")
+    if scale_val in SCALE_HEIGHTS:
+        filters.append(f"scale=-1:{SCALE_HEIGHTS[scale_val]}:flags=lanczos")
+    return filters
+
+
+def webp_args(crop_val, fps_val, scale_val, output_path):
+    vf = crop_fps_scale_filters(crop_val, fps_val, scale_val)
+    return ["-vf", ",".join(vf) if vf else "null", "-vcodec", "libwebp", "-q:v", "90", "-loop", "0", "-an", output_path]
+
+
 def build_gif_filter_graph(fps_val, scale_val, dither_val, boomerang=False, crop_val='none', speed_val='1.0', meme_top='', meme_bottom=''):
     filters = []
-    
+
     # 1. Playback Speed Multiplier
     try:
         sp = float(speed_val)
         if sp > 0 and sp != 1.0:
             filters.append(f"setpts={1.0/sp:.4f}*PTS")
-    except:
+    except (TypeError, ValueError):
         pass
 
-    # 2. Aspect Ratio / Smart Blur Padding / Crop Filter
-    if crop_val == '1:1':
-        filters.append("crop=min(iw\\,ih):min(iw\\,ih)")
-    elif crop_val == '9:16':
-        filters.append("crop=ih*9/16:ih")
-    elif crop_val == '4:3':
-        filters.append("crop=ih*4/3:ih")
-    elif crop_val == '16:9_blur':
-        # Smart Blur Background (16:9)
-        filters.append("split[v0][v1];[v0]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bg];[v1]scale=-1:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
-    elif crop_val == '9:16_blur':
-        # Smart Blur Background (9:16)
-        filters.append("split[v0][v1];[v0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[v1]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
+    # 2-4. Crop / blur padding, FPS, Lanczos scale
+    filters.extend(crop_fps_scale_filters(crop_val, fps_val, scale_val))
 
-    # 3. FPS filter if specific fps requested
-    if fps_val and fps_val != "original":
-        filters.append(f"fps={fps_val}")
-        
-    # 4. Lanczos high-quality scale if requested
-    if scale_val and scale_val != "original":
-        if scale_val == "1080p":
-            filters.append("scale=-1:1080:flags=lanczos")
-        elif scale_val == "720p":
-            filters.append("scale=-1:720:flags=lanczos")
-        elif scale_val == "480p":
-            filters.append("scale=-1:480:flags=lanczos")
-        elif scale_val == "360p":
-            filters.append("scale=-1:360:flags=lanczos")
-            
     # 5. Meme text overlays
     if meme_top:
         safe_top = meme_top.replace("'", "").replace(":", "").replace("[", "").replace("]", "").replace("\\", "")
@@ -1452,20 +1537,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             conv_ret = run_process(conv_cmd)
         elif fmt == 'webp':
             app_logs.append("Rendering Animated 24-Bit WebP...")
-            vf = []
-            if crop and crop != "none":
-                if crop == '1:1': vf.append("crop=min(iw\\,ih):min(iw\\,ih)")
-                elif crop == '9:16': vf.append("crop=ih*9/16:ih")
-                elif crop == '4:3': vf.append("crop=ih*4/3:ih")
-                elif crop == '16:9_blur': vf.append("split[v0][v1];[v0]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bg];[v1]scale=-1:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
-                elif crop == '9:16_blur': vf.append("split[v0][v1];[v0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[v1]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
-            if fps and fps != "original": vf.append(f"fps={fps}")
-            if scale and scale != "original":
-                if scale == "1080p": vf.append("scale=-1:1080:flags=lanczos")
-                elif scale == "720p": vf.append("scale=-1:720:flags=lanczos")
-                elif scale == "480p": vf.append("scale=-1:480:flags=lanczos")
-            vf_str = ",".join(vf) if vf else "null"
-            conv_cmd = [FFMPEG_EXE, "-y", "-i", temp_video, "-vf", vf_str, "-vcodec", "libwebp", "-q:v", "90", "-loop", "0", "-an", final_output]
+            conv_cmd = [FFMPEG_EXE, "-y", "-i", temp_video] + webp_args(crop, fps, scale, final_output)
             conv_ret = run_process(conv_cmd)
 
         try:
@@ -1528,17 +1600,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         elif fmt == 'webm':
             cmd.extend(["-f", "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]/best", "--merge-output-format", "webm"])
         else: # Default MP4
-            if quality == "Best" or quality == "4K":
-                cmd.extend(["-f", "bestvideo+bestaudio/best"])
-            elif quality == "1440p":
-                cmd.extend(["-f", "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best"])
-            elif quality == "1080p":
-                cmd.extend(["-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"])
-            elif quality == "720p":
-                cmd.extend(["-f", "bestvideo[height<=720]+bestaudio/best[height<=720]/best"])
-            elif quality == "480p":
-                cmd.extend(["-f", "bestvideo[height<=480]+bestaudio/best[height<=480]/best"])
-            cmd.extend(["--merge-output-format", "mp4"])
+            cmd.extend(["-f", quality_format(quality), "--merge-output-format", "mp4"])
             if embed_metadata:
                 cmd.extend(["--embed-thumbnail", "--add-metadata"])
         
@@ -1555,7 +1617,8 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         
         cmd.append(url)
         app_logs.append(f"Starting universal download...")
-        ret = run_process(cmd)
+        tracker = OutputFileTracker()
+        ret = run_process(cmd, tracker.feed)
         if cancel_event.is_set():
             return
 
@@ -1563,7 +1626,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         if ret != 0 and used_aria:
             app_logs.append("Turbo accelerator encountered server connection throttle. Automatically retrying with native downloader...")
             cmd_fallback = [c for c in cmd if c not in ("--downloader", ARIA2C_EXE, "--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16")]
-            ret = run_process(cmd_fallback)
+            ret = run_process(cmd_fallback, tracker.feed)
             if cancel_event.is_set():
                 return
 
@@ -1586,27 +1649,9 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             app_logs.append("CRITICAL ERROR: Download process failed.")
             return
 
-        # Track history
-        valid_exts = ('.mp3', '.mp4', '.wav', '.flac', '.webm', '.gif')
-        for l in app_logs:
-            fname = None
-            if "[download] Destination:" in l:
-                fname = l.split("Destination: ")[-1].strip()
-            elif "has already been downloaded" in l:
-                fname = l.replace("[download] ", "").split(" has already")[0].strip()
-            elif "[Merger] Merging formats into" in l:
-                try: fname = l.split('"')[1].strip()
-                except: pass
-            elif "[ExtractAudio] Destination:" in l:
-                fname = l.split("Destination: ")[-1].strip()
-            elif "[ChapterSplit] Destination:" in l:
-                fname = l.split("Destination: ")[-1].strip()
-                
-            if fname:
-                fname = fname.split("\\")[-1].split("/")[-1]
-                if not re.search(r'\.f\d+\.[a-zA-Z0-9]+$', fname.lower()) and fname.lower().endswith(valid_exts):
-                    add_history_entry(fname, fmt.upper())
-                    break
+        # Track history: one entry per finished file, so a playlist records every video
+        for fname in tracker.files():
+            add_history_entry(fname, fmt.upper())
 
         app_logs.append("Process Finished Successfully!")
 
@@ -1640,20 +1685,7 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
             "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", output_path
         ])
     elif target_format == 'webp':
-        vf = []
-        if crop and crop != "none":
-            if crop == '1:1': vf.append("crop=min(iw\\,ih):min(iw\\,ih)")
-            elif crop == '9:16': vf.append("crop=ih*9/16:ih")
-            elif crop == '4:3': vf.append("crop=ih*4/3:ih")
-            elif crop == '16:9_blur': vf.append("split[v0][v1];[v0]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5[bg];[v1]scale=-1:1080[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
-            elif crop == '9:16_blur': vf.append("split[v0][v1];[v0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[v1]scale=1080:-1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2")
-        if fps and fps != "original": vf.append(f"fps={fps}")
-        if scale and scale != "original":
-            if scale == "1080p": vf.append("scale=-1:1080:flags=lanczos")
-            elif scale == "720p": vf.append("scale=-1:720:flags=lanczos")
-            elif scale == "480p": vf.append("scale=-1:480:flags=lanczos")
-        vf_str = ",".join(vf) if vf else "null"
-        cmd.extend(["-vf", vf_str, "-vcodec", "libwebp", "-q:v", "90", "-loop", "0", "-an", output_path])
+        cmd.extend(webp_args(crop, fps, scale, output_path))
     elif target_format in ('mp3', 'wav', 'flac'):
         if target_format == 'mp3':
             cmd.extend(["-vn", "-c:a", "libmp3lame", "-b:a", "320k", output_path])
@@ -1676,10 +1708,12 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
 
 # --- STARTUP ---
 def configure_webview_permissions():
-    """Silently allow permissions (such as clipboard read/write, notifications) in WebView2 so browser permission prompts never appear."""
+    """Silently allow clipboard and notifications in WebView2 so their prompts never appear.
+    Everything else (camera, microphone, location...) keeps WebView2's default handling."""
     try:
         import webview.platforms.edgechromium as ec
-        from Microsoft.Web.WebView2.Core import CoreWebView2PermissionState
+        from Microsoft.Web.WebView2.Core import CoreWebView2PermissionState, CoreWebView2PermissionKind
+        allowed_kinds = {CoreWebView2PermissionKind.ClipboardRead, CoreWebView2PermissionKind.Notifications}
 
         orig_on_webview_ready = ec.EdgeChrome.on_webview_ready
 
@@ -1688,6 +1722,8 @@ def configure_webview_permissions():
             if args.IsSuccess and sender.CoreWebView2:
                 def on_permission_requested(s, p_args):
                     try:
+                        if p_args.PermissionKind not in allowed_kinds:
+                            return
                         p_args.State = CoreWebView2PermissionState.Allow
                         p_args.Handled = True
                     except Exception:
