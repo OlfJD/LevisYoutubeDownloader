@@ -9,6 +9,10 @@ import re
 import urllib.request
 import urllib.parse
 import zipfile
+import hashlib
+import ctypes
+import functools
+import traceback
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, abort
 import ipaddress
@@ -77,8 +81,42 @@ live_process = None
 download_queue = []
 queue_worker_active = False
 
-# Set by /api/stop; cleared when a new job starts. run_process won't start a process while it is set.
-cancel_event = threading.Event()
+# --- JOB RUN NUMBERS ---
+# Every download / conversion / update gets a run number. Stop and every new job bump it, and a job only
+# acts while its number is still current. A stopped job that finishes late can then neither start its
+# fallback or conversion step nor touch the state of the job that replaced it.
+_job_lock = threading.Lock()
+job_run = 0
+
+
+def next_job_run():
+    global job_run
+    with _job_lock:
+        job_run += 1
+        return job_run
+
+
+def job_current(run):
+    return run is None or run == job_run
+
+
+def background_job(name):
+    """Runs fn(run, ...) under a fresh run number. A crash goes to errors.log and to the UI as CRITICAL ERROR,
+    so a broken job can never leave the UI saying "downloading". The wrapper returns the run number."""
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            run = next_job_run()
+            app_logs.clear()
+            try:
+                fn(run, *args, **kwargs)
+            except Exception as e:
+                log_error(f"{name} crashed: {e!r}\n{traceback.format_exc()}")
+                if job_current(run):
+                    app_logs.append(f"CRITICAL ERROR: {name} stopped unexpectedly ({e}). Details are in errors.log.")
+            return run
+        return wrapper
+    return deco
 
 
 def kill_process_tree(proc):
@@ -232,28 +270,26 @@ def initialize_assets():
             except Exception as e:
                 app_logs.append(f"Failed to copy {exe_name}: {e}")
 
-    # 2. Automated fallback: Download missing binaries if not present
+    # 2. Automated fallback: Download missing binaries if not present.
+    # These are programs we then run, so they are only installed when their SHA-256 matches what GitHub publishes.
     target_ytdlp = os.path.join(TOOLS_DIR, "yt-dlp.exe")
     if not os.path.exists(target_ytdlp):
         try:
             app_logs.append("Fetching yt-dlp core binary...")
-            urllib.request.urlretrieve("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe", target_ytdlp + ".part")
-            os.replace(target_ytdlp + ".part", target_ytdlp)
-            app_logs.append("yt-dlp engine downloaded successfully.")
+            download_verified("yt-dlp/yt-dlp", "yt-dlp.exe", target_ytdlp)
+            app_logs.append("yt-dlp engine downloaded and verified (SHA-256).")
         except Exception as e:
             app_logs.append(f"Error downloading yt-dlp: {e}")
+            log_error(f"yt-dlp download failed: {e}")
 
     target_ffmpeg = os.path.join(TOOLS_DIR, "ffmpeg.exe")
     if not os.path.exists(target_ffmpeg):
         try:
             app_logs.append("Fetching FFmpeg & FFprobe engine binaries...")
-            url = "https://github.com/yt-dlp/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            # Stream the ~150 MB archive to disk instead of holding it in memory
+            # Streamed to disk (the archive is ~200 MB) and checked before anything is extracted
             zip_path = os.path.join(TOOLS_DIR, "_ffmpeg_download.zip")
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp, open(zip_path, 'wb') as out:
-                    shutil.copyfileobj(resp, out, 1024 * 1024)
+                download_verified("yt-dlp/FFmpeg-Builds", "ffmpeg-master-latest-win64-gpl.zip", zip_path)
                 with zipfile.ZipFile(zip_path) as z:
                     for name in z.namelist():
                         base = os.path.basename(name)
@@ -266,9 +302,67 @@ def initialize_assets():
             finally:
                 if os.path.exists(zip_path):
                     os.remove(zip_path)
-            app_logs.append("FFmpeg engine installed successfully.")
+            app_logs.append("FFmpeg engine downloaded, verified (SHA-256) and installed.")
         except Exception as e:
             app_logs.append(f"Error downloading FFmpeg: {e}")
+            log_error(f"FFmpeg download failed: {e}")
+
+
+def parse_checksum_file(text, name):
+    """SHA-256 for `name` from a sha256sum-style file ("<hash>  <name>" or "<hash> *<name>")."""
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[-1].lstrip('*') == name and re.fullmatch(r'[0-9a-fA-F]{64}', parts[0]):
+            return parts[0].lower()
+    return None
+
+
+def github_release_asset(repo, name):
+    """Download URL and expected SHA-256 of an asset in the repo's latest release. GitHub publishes a digest
+    per asset; releases without one fall back to the checksum file published next to the asset."""
+    headers = {'User-Agent': 'LevisDownloader', 'Accept': 'application/vnd.github+json'}
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest", headers=headers)
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        release = json.loads(resp.read().decode())
+    assets = {a.get("name"): a for a in release.get("assets", [])}
+    asset = assets.get(name)
+    if not asset:
+        raise RuntimeError(f"{name} is not part of {repo}'s latest release")
+    digest = (asset.get("digest") or "").lower()
+    expected = digest.split(":", 1)[1] if digest.startswith("sha256:") else None
+    if not expected:
+        for sums_name in ("SHA2-256SUMS", "checksums.sha256"):
+            if sums_name in assets:
+                sreq = urllib.request.Request(assets[sums_name]["browser_download_url"], headers={'User-Agent': 'LevisDownloader'})
+                with urllib.request.urlopen(sreq, timeout=15) as resp:
+                    expected = parse_checksum_file(resp.read().decode('utf-8', 'ignore'), name)
+                if expected:
+                    break
+    return asset["browser_download_url"], expected
+
+
+def download_verified(repo, name, dest):
+    """Downloads a release asset to `dest` only if its SHA-256 matches; otherwise nothing is installed."""
+    url, expected = github_release_asset(repo, name)
+    if not expected:
+        raise RuntimeError(f"no SHA-256 is published for {name}, so it was not installed")
+    part = dest + ".part"
+    sha = hashlib.sha256()
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'LevisDownloader'})
+        with urllib.request.urlopen(req, timeout=60) as resp, open(part, 'wb') as out:
+            while True:
+                chunk = resp.read(1024 * 1024)
+                if not chunk:
+                    break
+                sha.update(chunk)
+                out.write(chunk)
+        if sha.hexdigest() != expected:
+            raise RuntimeError(f"{name} failed the SHA-256 check (download damaged or tampered with), so it was not installed")
+        os.replace(part, dest)
+    finally:
+        if os.path.exists(part):
+            os.remove(part)
 
 BROWSER_LABELS = {"chrome": "Chrome", "edge": "Edge", "brave": "Brave", "firefox": "Firefox",
                   "vivaldi": "Vivaldi", "opera": "Opera", "operagx": "Opera GX"}
@@ -396,34 +490,148 @@ def parse_cookies_file_info(cookie_path=COOKIES_STORED):
             info["summary"] = f"Error reading cookies: {e}"
     return info
 
+class UnreadableFile(Exception):
+    """The file exists but stayed locked: callers must not write defaults over it."""
+
+
+def retry_locked(op, attempts=5, delay=0.1):
+    """Virus scanners, OneDrive and backup tools lock files for a moment; retry before giving up."""
+    for i in range(attempts):
+        try:
+            return op()
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(delay * (i + 1))
+
+
 def write_json_atomic(path, data):
     """Write to a temp file and swap it in, so a crash mid-write can't leave a truncated JSON file."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(data, f)
-    os.replace(tmp, path)
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+        retry_locked(lambda: os.replace(tmp, path))
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def read_json(path, expected_type, default):
+    """Missing -> default. Corrupt -> moved aside to *.corrupt (logged) and default. Still locked after
+    retries -> UnreadableFile, so a default is never mistaken for the user's data and saved over it."""
+    if not os.path.exists(path):
+        return default
+
+    def _read():
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+    try:
+        text = retry_locked(_read)
+    except OSError as e:
+        raise UnreadableFile(f"{os.path.basename(path)} could not be read: {e}")
+    try:
+        data = json.loads(text)
+        if not isinstance(data, expected_type):
+            raise ValueError(f"expected {expected_type.__name__}")
+        return data
+    except ValueError as e:
+        try:
+            os.replace(path, path + ".corrupt")
+        except OSError:
+            pass
+        log_error(f"{os.path.basename(path)} was damaged ({e}); kept as {os.path.basename(path)}.corrupt and started fresh")
+        return default
+
+
+# --- ERROR LOG: things the user would otherwise never see (failed saves, crashed background jobs) ---
+ERRORS_LOG = os.path.join(APPDATA_DIR, "errors.log")
+ERRORS_LOG_MAX = 64 * 1024
+_errors_lock = threading.Lock()
+
+
+def log_error(message):
+    """Appends to a small errors.log; past 64 KB the older half is dropped. Never raises."""
+    try:
+        os.makedirs(APPDATA_DIR, exist_ok=True)
+        with _errors_lock:
+            if os.path.exists(ERRORS_LOG) and os.path.getsize(ERRORS_LOG) > ERRORS_LOG_MAX:
+                with open(ERRORS_LOG, 'rb') as f:
+                    data = f.read()
+                keep = data[len(data) // 2:]
+                keep = keep[keep.find(b"\n") + 1:]
+                with open(ERRORS_LOG, 'wb') as f:
+                    f.write(keep)
+            with open(ERRORS_LOG, 'a', encoding='utf-8') as f:
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {message}\n")
+    except Exception:
+        pass
+
+
+# --- SETTINGS: limits in one place; everything loaded or posted is checked against them ---
+SETTING_CHOICES = {
+    "quality": {"Best", "4K", "1440p", "1080p", "720p", "480p"},
+    "videoCodec": {"auto", "h264", "av1"},
+    "browserCookies": {"none"} | set(BROWSER_LABELS),
+    "gifFps": {"original", "60", "50", "30", "24", "15"},
+    "gifScale": {"original", "1080p", "720p", "480p", "360p"},
+    "gifDither": {"bayer", "sierra", "floyd", "none"},
+    "gifMaxFileSize": {"none", "8M", "15M", "25M", "50M"},
+}
+SETTING_BOOLS = {"playlistMode", "sponsorBlock", "embedMetadata", "turboMode", "splitChapters", "gifAudioLoop"}
+SETTING_TEXT_MAX = {"twitchToken": 4096, "downloadDir": 1024}
+
+
+def sanitize_settings(data):
+    """Unknown keys and out-of-range values are dropped, so a hand-edited or old settings.json can't break
+    the app: the UI then uses its own default for that key."""
+    clean = {}
+    if not isinstance(data, dict):
+        return clean
+    for key, value in data.items():
+        if key in SETTING_CHOICES:
+            ok = isinstance(value, str) and value in SETTING_CHOICES[key]
+        elif key in SETTING_BOOLS:
+            ok = isinstance(value, bool)
+        elif key in SETTING_TEXT_MAX:
+            ok = isinstance(value, str) and len(value) <= SETTING_TEXT_MAX[key]
+        else:
+            ok = False
+        if ok:
+            clean[key] = value
+    return clean
 
 
 _settings_lock = threading.Lock()
+_pending_settings = {}  # changes that could not be saved yet (file locked); retried on the next save
 
 
-def load_settings():
+def load_settings(strict=False):
+    """strict=True raises UnreadableFile instead of pretending the file is empty."""
     try:
-        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
+        data = sanitize_settings(read_json(SETTINGS_FILE, dict, {}))
+    except UnreadableFile:
+        if strict:
+            raise
+        data = {}
+    data.update(_pending_settings)
+    return data
 
 
 def update_settings(changes):
-    """Read-modify-write under a lock so two requests can't drop each other's keys."""
+    """Read-modify-write under a lock so two requests can't drop each other's keys. If the file stays
+    locked, the change is kept in memory (and logged) and goes out with the next save that works."""
     with _settings_lock:
-        data = load_settings()
-        data.update(changes)
-        write_json_atomic(SETTINGS_FILE, data)
-        return data
+        _pending_settings.update(sanitize_settings(changes))
+        try:
+            data = load_settings(strict=True)
+            write_json_atomic(SETTINGS_FILE, data)
+            _pending_settings.clear()
+            return True
+        except (UnreadableFile, OSError) as e:
+            log_error(f"Settings not saved yet, kept in memory: {e}")
+            return False
 
 
 def get_cookie_status_dict():
@@ -529,20 +737,17 @@ def merge_cookie_jars(existing, incoming):
     return "\n".join(["# Netscape HTTP Cookie File"] + kept + new_rows) + "\n"
 
 # --- HISTORY DATABASE FUNCTIONS ---
-def load_history():
-    try:
-        if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, 'r') as f:
-                return json.load(f)
-    except:
-        pass
-    return []
+HISTORY_MAX = 30
 
-def save_history(history_list):
+
+def load_history(strict=False):
     try:
-        write_json_atomic(HISTORY_FILE, history_list[:30])  # Keep up to last 30 entries
-    except Exception as e:
-        app_logs.append(f"History save error: {e}")
+        items = read_json(HISTORY_FILE, list, [])
+    except UnreadableFile:
+        if strict:
+            raise
+        return []
+    return [h for h in items if isinstance(h, dict) and isinstance(h.get("filename"), str)][:HISTORY_MAX]
 
 _history_lock = threading.Lock()
 
@@ -550,15 +755,17 @@ def add_history_entry(filename, format_type="MP4"):
     try:
         date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
         with _history_lock:
-            current_hist = load_history()
+            # strict: an unreadable history must not be replaced by a list holding only this entry
+            current_hist = load_history(strict=True)
             current_hist.insert(0, {
                 "date": date_str,
                 "filename": filename,
                 "type": format_type
             })
-            save_history(current_hist)
+            write_json_atomic(HISTORY_FILE, current_hist[:HISTORY_MAX])
     except Exception as e:
-        app_logs.append(f"Add history error: {e}")
+        app_logs.append(f"History not updated: {e}")
+        log_error(f"History not updated for {filename}: {e}")
 
 # --- LAN IP HELPER ---
 def get_local_ip():
@@ -663,18 +870,19 @@ def handle_settings():
                 "splitChapters": False,
                 "twitchToken": ""
             })
-        if "downloadDir" in data and os.path.exists(data["downloadDir"]):
+        if "downloadDir" in data and os.path.isdir(data["downloadDir"]):
             download_dir = data["downloadDir"]
         data["downloadDir"] = download_dir
         return jsonify(data)
     else:
-        new_data = request.get_json(silent=True) or {}
-        update_settings(new_data)
-        if "downloadDir" in new_data and os.path.exists(new_data["downloadDir"]):
+        new_data = sanitize_settings(request.get_json(silent=True) or {})
+        saved = update_settings(new_data)
+        if "downloadDir" in new_data and os.path.isdir(new_data["downloadDir"]):
             download_dir = new_data["downloadDir"]
         if "twitchToken" in new_data:
             update_twitch_auth_cookie(new_data["twitchToken"])
-        return jsonify({"success": True})
+        # saved=False: kept in memory and retried on the next change (see errors.log)
+        return jsonify({"success": True, "saved": saved})
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
@@ -779,8 +987,8 @@ def probe_media_file(target):
 
 @app.route('/api/stop', methods=['POST'])
 def api_stop():
-    # Flag first so run_download doesn't fall back to another downloader or start the conversion step
-    cancel_event.set()
+    # New run number first, so the stopped job doesn't fall back to another downloader or start converting
+    next_job_run()
     proc = current_process
     if proc:
         kill_process_tree(proc)
@@ -812,21 +1020,18 @@ def api_check_updates():
 
 @app.route('/api/update', methods=['POST'])
 def api_update():
-    global app_logs
-    app_logs.clear()
-    cancel_event.clear()
-
-    def run_update_thread():
+    @background_job("Update")
+    def run_update_thread(run):
         app_logs.append("Starting engine updater pipeline...")
-        cmd = [YTDLP_EXE, "-U"]
-        run_process(cmd)
-        
+        # yt-dlp -U checks the new build against the release's SHA2-256SUMS itself
+        run_process([YTDLP_EXE, "-U"], run=run)
+
         # Re-check update status to refresh info immediately
         check_all_updates_worker()
         app_logs.append("Update cycle finished.")
         app_logs.append("Process Finished Successfully!")
 
-    threading.Thread(target=run_update_thread).start()
+    threading.Thread(target=run_update_thread, daemon=True).start()
     return jsonify({"success": True})
 
 @app.route('/api/cookie_status', methods=['GET'])
@@ -987,17 +1192,20 @@ def api_download_file(filename):
 def api_record_live():
     global live_recording_state, live_process
     data = request.get_json(silent=True) or {}
-    url = data.get('url', '').strip()
+    url = str(data.get('url', '')).strip()
     quality = data.get('quality', 'Best')
-    live_from_start = data.get('liveFromStart', False)
-    custom_name = sanitize_filename(data.get('customName', ''))
-    if not is_valid_media_url(url):
-        return jsonify({"success": False, "error": "Invalid URL"})
+    live_from_start = data.get('liveFromStart', False) is True
+    custom_name = sanitize_filename(str(data.get('customName', ''))[:NAME_MAX])
     browser_cookies = data.get('browserCookies', 'none')
-
     if not url:
         return jsonify({"success": False, "error": "No Live URL provided"})
-    
+    if not is_valid_media_url(url):
+        return jsonify({"success": False, "error": "Invalid URL"})
+    if quality not in SETTING_CHOICES["quality"]:
+        return jsonify({"success": False, "error": "Unknown quality"})
+    if browser_cookies not in SETTING_CHOICES["browserCookies"]:
+        browser_cookies = 'none'
+
     if live_recording_state["is_recording"]:
         return jsonify({"success": False, "error": "A live recording is already in progress"})
 
@@ -1029,14 +1237,31 @@ def api_record_live():
         "live_from_start": live_from_start
     }
 
-    threading.Thread(target=run_live_recorder, args=(url, target_dir, output_template, quality, live_from_start, browser_cookies, custom_name)).start()
+    # The thread gets this recording's own state dict: when a new recording starts, the old thread's late
+    # clean-up only ever touches its own (replaced) dict, never the new recording's.
+    threading.Thread(target=run_live_recorder, args=(live_recording_state, url, target_dir, output_template, quality, live_from_start, browser_cookies), daemon=True).start()
     return jsonify({"success": True, "state": live_recording_state})
 
-def run_live_recorder(url, target_dir, output_template, quality, live_from_start, browser_cookies, custom_name):
-    global live_recording_state, live_process, app_logs
-    
+def run_live_recorder(state, url, target_dir, output_template, quality, live_from_start, browser_cookies):
+    global live_process
+    started = {}  # the yt-dlp process this recording started, so clean-up only clears its own
+    try:
+        _record_live(state, started, url, target_dir, output_template, quality, live_from_start, browser_cookies)
+    except Exception as e:
+        log_error(f"Live recording crashed: {e!r}\n{traceback.format_exc()}")
+        app_logs.append(f"Live DVR Error: {e} (details in errors.log)")
+    finally:
+        # always runs: the UI must never keep showing REC for a recorder that is gone
+        state["is_recording"] = False
+        if live_process is started.get("proc"):
+            live_process = None
+    _finalize_live(state, target_dir)
+
+
+def _record_live(state, started, url, target_dir, output_template, quality, live_from_start, browser_cookies):
+    global live_process
     current_live_from_start = live_from_start
-    
+
     my_env = os.environ.copy()
     my_env["PATH"] += os.pathsep + TOOLS_DIR
     startupinfo = None
@@ -1044,7 +1269,7 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-    while live_recording_state.get("is_recording", False):
+    while state.get("is_recording", False):
         cmd = [YTDLP_EXE]
         cmd.extend(js_runtime_args() + cookie_args(browser_cookies))
 
@@ -1072,7 +1297,7 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
         fallback_to_live = False
         
         try:
-            live_process = subprocess.Popen(
+            proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -1083,33 +1308,37 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
                 encoding='utf-8',
                 errors='ignore'
             )
+            started["proc"] = proc
+            live_process = proc
+            if not state.get("is_recording"):
+                kill_process_tree(proc)  # Stop arrived while it was starting
 
-            for line in live_process.stdout:
+            for line in proc.stdout:
                 clean_line = line.strip()
                 if clean_line:
                     # Detect filename output from --print filename or destination
                     if (clean_line.endswith('.mp4') or clean_line.endswith('.ts') or clean_line.endswith('.mkv')) and not clean_line.startswith('['):
                         resolved_path = clean_line if os.path.isabs(clean_line) else os.path.join(target_dir, clean_line)
                         resolved_name = os.path.basename(resolved_path)
-                        live_recording_state["output_path"] = resolved_path
-                        live_recording_state["filename"] = resolved_name
-                        live_recording_state["title"] = os.path.splitext(resolved_name)[0]
+                        state["output_path"] = resolved_path
+                        state["filename"] = resolved_name
+                        state["title"] = os.path.splitext(resolved_name)[0]
                     elif "[download] Destination: " in clean_line:
                         dest = clean_line.split("[download] Destination: ", 1)[1].strip()
                         if dest:
                             resolved_path = dest if os.path.isabs(dest) else os.path.join(target_dir, dest)
                             resolved_name = os.path.basename(resolved_path)
-                            live_recording_state["output_path"] = resolved_path
-                            live_recording_state["filename"] = resolved_name
-                            live_recording_state["title"] = os.path.splitext(resolved_name)[0]
+                            state["output_path"] = resolved_path
+                            state["filename"] = resolved_name
+                            state["title"] = os.path.splitext(resolved_name)[0]
                     elif "[Merger] Merging formats into " in clean_line:
                         dest = clean_line.split("[Merger] Merging formats into ", 1)[1].strip().strip('"')
                         if dest:
                             resolved_path = dest if os.path.isabs(dest) else os.path.join(target_dir, dest)
                             resolved_name = os.path.basename(resolved_path)
-                            live_recording_state["output_path"] = resolved_path
-                            live_recording_state["filename"] = resolved_name
-                            live_recording_state["title"] = os.path.splitext(resolved_name)[0]
+                            state["output_path"] = resolved_path
+                            state["filename"] = resolved_name
+                            state["title"] = os.path.splitext(resolved_name)[0]
 
                     # Detect live-from-start rewind limitation
                     if current_live_from_start and (
@@ -1123,13 +1352,13 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
                     if len(app_logs) > 300:
                         app_logs.pop(0)
 
-            live_process.wait()
+            proc.wait()
         except Exception as e:
             app_logs.append(f"Live DVR Error: {e}")
             break
 
         # If --live-from-start failed because no start format exists, switch directly to live stream recording
-        if fallback_to_live and current_live_from_start and live_recording_state.get("is_recording", False):
+        if fallback_to_live and current_live_from_start and state.get("is_recording", False):
             app_logs.append("⚠️ Notice: Broadcast does not support rewinding to start (no VOD archive available). Switching to real-time live recording...")
             current_live_from_start = False
             time.sleep(0.5)
@@ -1137,22 +1366,22 @@ def run_live_recorder(url, target_dir, output_template, quality, live_from_start
         
         break
 
-    live_process = None
-    live_recording_state["is_recording"] = False
-    
-    output_path = live_recording_state.get("output_path", "")
+
+def _finalize_live(state, target_dir):
+    """Finds the recorded file (also after a hard stop) and adds it to the history."""
+    output_path = state.get("output_path", "")
     if not (output_path and os.path.exists(output_path)):
         try:
             recent_files = [
                 os.path.join(target_dir, f) for f in os.listdir(target_dir) 
-                if f.endswith(('.mp4', '.mkv', '.ts')) and os.path.getmtime(os.path.join(target_dir, f)) >= live_recording_state.get("start_time", 0) - 5
+                if f.endswith(('.mp4', '.mkv', '.ts')) and os.path.getmtime(os.path.join(target_dir, f)) >= state.get("start_time", 0) - 5
             ]
             if recent_files:
                 recent_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
                 output_path = recent_files[0]
-                live_recording_state["output_path"] = output_path
-                live_recording_state["filename"] = os.path.basename(output_path)
-                live_recording_state["title"] = os.path.splitext(os.path.basename(output_path))[0]
+                state["output_path"] = output_path
+                state["filename"] = os.path.basename(output_path)
+                state["title"] = os.path.splitext(os.path.basename(output_path))[0]
         except Exception:
             pass
 
@@ -1225,7 +1454,7 @@ def process_queue_worker():
             item = pending[0]
             item['status'] = 'downloading'
             try:
-                run_download(
+                run = run_download(
                     url=item.get('url', ''),
                     fmt=item.get('format', 'mp4'),
                     quality=item.get('quality', 'Best'),
@@ -1240,7 +1469,7 @@ def process_queue_worker():
                     turbo_mode=item.get('turboMode', True),
                     split_chapters=item.get('splitChapters', False)
                 )
-                item['status'] = 'cancelled' if cancel_event.is_set() else 'completed'
+                item['status'] = 'completed' if job_current(run) else 'cancelled'
             except Exception as e:
                 item['status'] = 'failed'
                 item['error'] = str(e)
@@ -1248,88 +1477,148 @@ def process_queue_worker():
     finally:
         queue_worker_active = False
 
+# --- JOB OPTIONS: limits in one place; a request outside them is refused with a one-line reason ---
+DOWNLOAD_FORMATS = {"mp4", "mp3", "wav", "flac", "webm", "gif", "loop_mp4", "webp"}
+CONVERT_FORMATS = {"gif", "loop_mp4", "webp", "mp3", "wav", "flac"}
+TIME_RE = re.compile(r'^\d{1,2}(:\d{1,2}){0,2}(\.\d{1,3})?$')
+SPEED_MIN, SPEED_MAX = 0.25, 4.0
+CAPTION_MAX = 80
+NAME_MAX = 180
+
+
+class JobOptionError(ValueError):
+    pass
+
+
+def job_options(data, formats):
+    """Checks a download / conversion request and returns the run_download / run_local_convert arguments."""
+    def choice(key, allowed, default, label):
+        value = data.get(key, default)
+        if value not in allowed:
+            raise JobOptionError(f"{label} must be one of: {', '.join(sorted(allowed))}")
+        return value
+
+    def flag(key, default, label):
+        value = data.get(key, default)
+        if not isinstance(value, bool):
+            raise JobOptionError(f"{label} must be on or off")
+        return value
+
+    def clock(key, label):
+        value = str(data.get(key) or '').strip()
+        if value and not TIME_RE.match(value):
+            raise JobOptionError(f"{label} time must look like 00:01:30")
+        return value
+
+    def text(key, limit, label):
+        value = str(data.get(key) or '')
+        if len(value) > limit:
+            raise JobOptionError(f"{label} can be at most {limit} characters")
+        return value
+
+    try:
+        speed = float(data.get('speed', '1.0'))
+    except (TypeError, ValueError):
+        raise JobOptionError("Speed must be a number")
+    if not SPEED_MIN <= speed <= SPEED_MAX:
+        raise JobOptionError(f"Speed must be between {SPEED_MIN}x and {SPEED_MAX}x")
+
+    return {
+        "fmt": choice('format', formats, 'mp4' if 'mp4' in formats else 'gif', "Format"),
+        "quality": choice('quality', SETTING_CHOICES["quality"], 'Best', "Quality"),
+        "custom_name": sanitize_filename(text('customName', NAME_MAX, "File name")),
+        "playlist_mode": flag('playlistMode', False, "Playlist mode"),
+        "start_time": clock('startTime', "Start"),
+        "end_time": clock('endTime', "End"),
+        "fps": choice('fps', SETTING_CHOICES["gifFps"], 'original', "Frame rate"),
+        "scale": choice('scale', SETTING_CHOICES["gifScale"], 'original', "Resolution"),
+        "dither": choice('dither', SETTING_CHOICES["gifDither"], 'bayer', "Dithering"),
+        "boomerang": flag('boomerang', False, "Boomerang"),
+        "crop": choice('crop', {"none"} | set(CROP_FILTERS), 'none', "Shape"),
+        "speed": f"{speed:g}",
+        "meme_top": text('memeTop', CAPTION_MAX, "Top caption"),
+        "meme_bottom": text('memeBottom', CAPTION_MAX, "Bottom caption"),
+        "max_file_size": choice('maxFileSize', SETTING_CHOICES["gifMaxFileSize"], 'none', "Size limit"),
+        "sponsor_block": flag('sponsorBlock', False, "Skip sponsor segments"),
+        "browser_cookies": choice('browserCookies', SETTING_CHOICES["browserCookies"], 'none', "Browser"),
+        "embed_metadata": flag('embedMetadata', True, "Embed metadata"),
+        "video_codec": choice('videoCodec', SETTING_CHOICES["videoCodec"], 'auto', "Video codec"),
+        "turbo_mode": flag('turboMode', True, "Turbo downloads"),
+        "split_chapters": flag('splitChapters', False, "Split into chapters"),
+    }
+
+
+def resolve_input_file(path):
+    """A full path is used as is. A bare file name (the GIF studio's "From your downloads" list sends the
+    history entry's name) is looked up in the download folder and its subfolders."""
+    path = (path or '').strip()
+    if not path:
+        return None
+    if os.path.isfile(path):
+        return path
+    if os.path.basename(path) != path:
+        return None
+    candidate = os.path.join(download_dir, path)
+    if os.path.isfile(candidate):
+        return candidate
+    for root, _dirs, files in os.walk(download_dir):
+        if path in files:
+            return os.path.join(root, path)
+    return None
+
+
 @app.route('/api/download', methods=['POST'])
 def api_download():
     data = request.get_json(silent=True) or {}
-    url = data.get('url', '').strip()
-    fmt = data.get('format', 'mp4')
-    quality = data.get('quality', 'Best')
-    custom_name = sanitize_filename(data.get('customName', ''))
-    playlist_mode = data.get('playlistMode', False)
-    start_time = data.get('startTime', '').strip()
-    end_time = data.get('endTime', '').strip()
-    fps = data.get('fps', 'original')
-    scale = data.get('scale', 'original')
-    dither = data.get('dither', 'bayer')
-    boomerang = data.get('boomerang', False)
-    crop = data.get('crop', 'none')
-    speed = data.get('speed', '1.0')
-    meme_top = data.get('memeTop', '')
-    meme_bottom = data.get('memeBottom', '')
-    max_file_size = data.get('maxFileSize', 'none')
-    sponsor_block = data.get('sponsorBlock', False)
-    browser_cookies = data.get('browserCookies', 'none')
-    embed_metadata = data.get('embedMetadata', True)
-    video_codec = data.get('videoCodec', 'auto')
-    turbo_mode = data.get('turboMode', True)
-    split_chapters = data.get('splitChapters', False)
-    
+    url = str(data.get('url', '')).strip()
     if not url:
         return jsonify({"success": False, "error": "No URL provided"})
     if not is_valid_media_url(url):
         return jsonify({"success": False, "error": "Invalid URL"})
+    try:
+        opts = job_options(data, DOWNLOAD_FORMATS)
+    except JobOptionError as e:
+        return jsonify({"success": False, "error": str(e)})
 
-    threading.Thread(target=run_download, args=(
-        url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps, scale, dither,
-        boomerang, crop, speed, meme_top, meme_bottom, max_file_size, sponsor_block, browser_cookies, embed_metadata, video_codec,
-        turbo_mode, split_chapters
-    )).start()
+    threading.Thread(target=run_download, kwargs=dict(opts, url=url), daemon=True).start()
     return jsonify({"success": True})
 
 @app.route('/api/convert_local', methods=['POST'])
 def api_convert_local():
     data = request.get_json(silent=True) or {}
-    input_file = data.get('filePath', '').strip()
-    target_format = data.get('format', 'gif')
-    custom_name = sanitize_filename(data.get("customName", ""))
-    start_time = data.get('startTime', '').strip()
-    end_time = data.get('endTime', '').strip()
-    fps = data.get('fps', 'original')
-    scale = data.get('scale', 'original')
-    dither = data.get('dither', 'bayer')
-    boomerang = data.get('boomerang', False)
-    crop = data.get('crop', 'none')
-    speed = data.get('speed', '1.0')
-    meme_top = data.get('memeTop', '')
-    meme_bottom = data.get('memeBottom', '')
-    max_file_size = data.get('maxFileSize', 'none')
-    
-    if not input_file or not os.path.exists(input_file):
+    input_file = resolve_input_file(str(data.get('filePath', '')))
+    if not input_file:
         return jsonify({"success": False, "error": "Input file does not exist"})
-    
-    threading.Thread(target=run_local_convert, args=(
-        input_file, target_format, custom_name, start_time, end_time, fps, scale, dither,
-        boomerang, crop, speed, meme_top, meme_bottom, max_file_size
-    )).start()
+    try:
+        opts = job_options(data, CONVERT_FORMATS)
+    except JobOptionError as e:
+        return jsonify({"success": False, "error": str(e)})
+
+    keys = ("custom_name", "start_time", "end_time", "fps", "scale", "dither", "boomerang", "crop", "speed",
+            "meme_top", "meme_bottom", "max_file_size")
+    kwargs = {k: opts[k] for k in keys}
+    threading.Thread(target=run_local_convert, kwargs=dict(kwargs, input_file=input_file, target_format=opts["fmt"]), daemon=True).start()
     return jsonify({"success": True})
 
 # --- CORE PROCESS RUNNER ---
-def run_process(cmd_list, on_line=None):
-    """on_line sees every output line, including ones that later fall out of the 300-line app_logs window."""
+def run_process(cmd_list, on_line=None, run=None):
+    """on_line sees every output line, including ones that later fall out of the 300-line app_logs window.
+    With a run number, nothing starts once that run was stopped or replaced."""
     global app_logs, current_process
     my_env = os.environ.copy()
     my_env["PATH"] += os.pathsep + TOOLS_DIR
-    
+
     startupinfo = None
     if os.name == 'nt':
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
     ret_code = 1
-    if cancel_event.is_set():
+    if not job_current(run):
         return ret_code
+    proc = None
     try:
-        current_process = subprocess.Popen(
+        proc = subprocess.Popen(
             cmd_list,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -1339,8 +1628,11 @@ def run_process(cmd_list, on_line=None):
             encoding='utf-8',
             errors='ignore'
         )
+        current_process = proc
+        if not job_current(run):
+            kill_process_tree(proc)  # Stop arrived while it was starting
 
-        for line in current_process.stdout:
+        for line in proc.stdout:
             clean_line = line.strip()
             if clean_line:
                 app_logs.append(clean_line)
@@ -1349,12 +1641,14 @@ def run_process(cmd_list, on_line=None):
                 if on_line:
                     on_line(clean_line)
 
-        current_process.wait()
-        ret_code = current_process.returncode
+        proc.wait()
+        ret_code = proc.returncode
     except Exception as e:
         app_logs.append(f"CRITICAL ERROR: {str(e)}")
     finally:
-        current_process = None
+        # only clear our own process: a newer job may already have registered its own
+        if current_process is proc:
+            current_process = None
     return ret_code
 
 class OutputFileTracker:
@@ -1457,13 +1751,11 @@ def build_gif_filter_graph(fps_val, scale_val, dither_val, boomerang=False, crop
         graph = f"{prefix}split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff:reserve_transparent=on[p];[s1][p]paletteuse=dither={dither_opt}:diff_mode=rectangle"
     return graph
 
-def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps="original", scale="original", dither="bayer",
+@background_job("Download")
+def run_download(run, url, fmt, quality, custom_name, playlist_mode, start_time, end_time, fps="original", scale="original", dither="bayer",
                  boomerang=False, crop="none", speed="1.0", meme_top="", meme_bottom="", max_file_size="none",
                  sponsor_block=False, browser_cookies="none", embed_metadata=True, video_codec="auto",
                  turbo_mode=True, split_chapters=False):
-    global app_logs
-    app_logs.clear()
-    cancel_event.clear()
     check_cookies()
     app_logs.append(f"Universal Media Engine: Preparing download for {url}")
     
@@ -1489,8 +1781,8 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             
         cmd.extend(["--newline", "-o", temp_video, "--no-playlist", url])
         app_logs.append(f"Downloading source stream for {fmt.upper()} conversion...")
-        run_process(cmd)
-        if cancel_event.is_set():
+        run_process(cmd, run=run)
+        if not job_current(run):
             return
 
         if not os.path.exists(temp_video):
@@ -1520,7 +1812,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
             if end_time and not ("--download-sections" in cmd):
                 conv_cmd.extend(["-to", end_time])
             conv_cmd.extend(["-i", temp_video, "-vf", filter_graph, final_output])
-            conv_ret = run_process(conv_cmd)
+            conv_ret = run_process(conv_cmd, run=run)
         elif fmt == 'loop_mp4':
             app_logs.append("Rendering Looping Video Clip with Audio...")
             conv_cmd = [FFMPEG_EXE, "-y"]
@@ -1534,11 +1826,11 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
                 "-c:a", "aac", "-b:a", "320k",
                 "-movflags", "+faststart", final_output
             ])
-            conv_ret = run_process(conv_cmd)
+            conv_ret = run_process(conv_cmd, run=run)
         elif fmt == 'webp':
             app_logs.append("Rendering Animated 24-Bit WebP...")
             conv_cmd = [FFMPEG_EXE, "-y", "-i", temp_video] + webp_args(crop, fps, scale, final_output)
-            conv_ret = run_process(conv_cmd)
+            conv_ret = run_process(conv_cmd, run=run)
 
         try:
             if os.path.exists(temp_video):
@@ -1546,7 +1838,7 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         except:
             pass
 
-        if cancel_event.is_set():
+        if not job_current(run):
             return
         # The UI only stops waiting once it sees one of these two markers
         if conv_ret == 0 and os.path.exists(final_output):
@@ -1618,16 +1910,16 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
         cmd.append(url)
         app_logs.append(f"Starting universal download...")
         tracker = OutputFileTracker()
-        ret = run_process(cmd, tracker.feed)
-        if cancel_event.is_set():
+        ret = run_process(cmd, tracker.feed, run=run)
+        if not job_current(run):
             return
 
         # Transparent Auto-Fallback if aria2c was blocked by host
         if ret != 0 and used_aria:
             app_logs.append("Turbo accelerator encountered server connection throttle. Automatically retrying with native downloader...")
             cmd_fallback = [c for c in cmd if c not in ("--downloader", ARIA2C_EXE, "--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16")]
-            ret = run_process(cmd_fallback, tracker.feed)
-            if cancel_event.is_set():
+            ret = run_process(cmd_fallback, tracker.feed, run=run)
+            if not job_current(run):
                 return
 
         # Error diagnostics & subscriber/auth check
@@ -1655,11 +1947,9 @@ def run_download(url, fmt, quality, custom_name, playlist_mode, start_time, end_
 
         app_logs.append("Process Finished Successfully!")
 
-def run_local_convert(input_file, target_format, custom_name, start_time, end_time, fps="original", scale="original", dither="bayer",
+@background_job("Conversion")
+def run_local_convert(run, input_file, target_format, custom_name, start_time, end_time, fps="original", scale="original", dither="bayer",
                       boomerang=False, crop="none", speed="1.0", meme_top="", meme_bottom="", max_file_size="none"):
-    global app_logs
-    app_logs.clear()
-    cancel_event.clear()
     app_logs.append(f"Local Studio: Converting '{os.path.basename(input_file)}' to {target_format.upper()}...")
     
     timestamp = int(time.time())
@@ -1695,8 +1985,8 @@ def run_local_convert(input_file, target_format, custom_name, start_time, end_ti
             cmd.extend(["-vn", "-c:a", "flac", output_path])
             
     app_logs.append("Executing FFmpeg conversion...")
-    ret = run_process(cmd)
-    if cancel_event.is_set():
+    ret = run_process(cmd, run=run)
+    if not job_current(run):
         return
 
     if ret == 0 and os.path.exists(output_path):
@@ -1734,6 +2024,89 @@ def configure_webview_permissions():
     except Exception:
         pass
 
+# --- SINGLE INSTANCE ---
+# Two copies on the same data folder would overwrite each other's settings and history, and the second
+# can't get port 54321 anyway. A named mutex is an atomic claim (two copies starting at the same moment
+# can't both win, unlike looking for another process by name). "Local\" keeps it to this sign-in session,
+# and the name comes from the data folder, so a test copy with its own %APPDATA% can run next to it.
+ERROR_ALREADY_EXISTS = 183
+EVENT_MODIFY_STATE = 0x0002
+_instance_handles = []
+
+
+def _instance_names(data_dir):
+    tag = hashlib.sha1(os.path.normcase(os.path.abspath(data_dir)).encode('utf-8')).hexdigest()[:12]
+    return f"Local\\LevisDownloader-{tag}", f"Local\\LevisDownloader-{tag}-show"
+
+
+def _kernel32():
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    k32.CreateMutexW.restype = wintypes.HANDLE
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.CreateEventW.restype = wintypes.HANDLE
+    k32.CreateEventW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.OpenEventW.restype = wintypes.HANDLE
+    k32.OpenEventW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.SetEvent.argtypes = [wintypes.HANDLE]
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.WaitForSingleObject.restype = wintypes.DWORD
+    k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    return k32
+
+
+def claim_single_instance(data_dir=APPDATA_DIR):
+    """True if this is the only copy for this data folder. Otherwise the running copy is asked to bring
+    its window forward, and False is returned so this copy can quit."""
+    if os.name != 'nt':
+        return True
+    k32 = _kernel32()
+    mutex_name, show_name = _instance_names(data_dir)
+    handle = k32.CreateMutexW(None, False, mutex_name)
+    already_running = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+    if not handle:
+        return True  # can't tell; better to start than to refuse
+    if already_running:
+        show = k32.OpenEventW(EVENT_MODIFY_STATE, False, show_name)
+        if show:
+            k32.SetEvent(show)
+            k32.CloseHandle(show)
+        k32.CloseHandle(handle)
+        return False
+    _instance_handles.append(handle)  # held until the process exits
+    show = k32.CreateEventW(None, False, False, show_name)  # auto-reset
+    if show:
+        _instance_handles.append(show)
+        threading.Thread(target=_wait_for_show_requests, args=(k32, show), daemon=True).start()
+    return True
+
+
+def _wait_for_show_requests(k32, show_event):
+    while True:
+        if k32.WaitForSingleObject(show_event, 0xFFFFFFFF) != 0:
+            return
+        if window is None:
+            continue
+        for step in (window.restore, window.show):
+            try:
+                step()
+            except Exception:
+                pass
+        try:  # a quick on-top toggle brings it in front of other apps without keeping it there
+            window.on_top = True
+            window.on_top = False
+        except Exception:
+            pass
+
+
+def stop_running_jobs():
+    """Window closed: don't leave yt-dlp / ffmpeg running invisibly in the background."""
+    next_job_run()
+    for proc in (current_process, live_process):
+        if proc:
+            kill_process_tree(proc)
+
+
 def start_flask():
     import logging
     log = logging.getLogger('werkzeug')
@@ -1741,6 +2114,8 @@ def start_flask():
     app.run(host='0.0.0.0', port=54321, threaded=True)
 
 if __name__ == '__main__':
+    if not claim_single_instance():
+        sys.exit(0)  # the running copy was asked to show its window
     initialize_assets()
     configure_webview_permissions()
     threading.Thread(target=check_all_updates_worker, daemon=True).start()
@@ -1757,3 +2132,4 @@ if __name__ == '__main__':
         background_color='#1a1a24'
     )
     webview.start()
+    stop_running_jobs()

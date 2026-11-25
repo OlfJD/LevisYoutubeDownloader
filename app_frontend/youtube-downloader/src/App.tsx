@@ -21,6 +21,18 @@ import CustomDropdown, { DropdownOption } from './CustomDropdown';
 // -------------------------------------------------------------
 const fieldClass = "w-full px-3 py-2 rounded-control bg-[#17171d] border border-white/[0.08] text-[13px] text-white outline-none placeholder:text-gray-500 focus:border-white/25 disabled:opacity-50 transition-colors";
 
+// The newest "CRITICAL ERROR: ..." line from the backend log, as a one-line reason for the error popup
+function criticalErrorReason(logs: unknown[]): string | true {
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const l = logs[i];
+    if (typeof l === 'string' && l.startsWith('CRITICAL ERROR:')) {
+      const reason = l.slice('CRITICAL ERROR:'.length).trim();
+      return reason && reason !== 'Download process failed.' ? reason : true;
+    }
+  }
+  return true;
+}
+
 function Toggle({ on, onChange, accent, disabled, label }: { on: boolean; onChange: (v: boolean) => void; accent: string; disabled?: boolean; label: string }) {
   return (
     <button
@@ -223,7 +235,8 @@ export default function App() {
   const [url, setUrl] = useState('');
   const [customName, setCustomName] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState(false);
+  // false, true (failed, no details) or the one-line reason the backend gave
+  const [downloadError, setDownloadError] = useState<boolean | string>(false);
   const [authErrorDetected, setAuthErrorDetected] = useState(false);
   
   // Downloader Settings State
@@ -449,7 +462,7 @@ export default function App() {
       });
       const data = await response.json();
       if (!data.success) {
-        setDownloadError(true);
+        setDownloadError(data.error || true);
         setIsDownloading(false);
       }
     } catch (error) {
@@ -838,7 +851,7 @@ export default function App() {
 
         {/* Download Error Notification Popup */}
         <AnimatePresence>
-          {downloadError && activeView === 'main' && (
+          {downloadError && (activeView === 'main' || activeView === 'gif_machine') && (
             <motion.div
               initial={{ opacity: 0, y: -20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -861,9 +874,11 @@ export default function App() {
                 <button onClick={() => setDownloadError(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
               </div>
               <p className="text-xs font-medium relative z-10 leading-relaxed text-gray-300">
-                {authErrorDetected 
+                {authErrorDetected
                   ? "This Twitch VOD or stream is subscriber-only or requires account login. Configure credentials in Cookie Settings."
-                  : "The download process encountered an error. Check logs for details or update the tool."}
+                  : typeof downloadError === 'string'
+                    ? downloadError
+                    : "The download process encountered an error. Check logs for details or update the tool."}
               </p>
               <div className="flex gap-2 mt-1">
                 {authErrorDetected ? (
@@ -956,7 +971,9 @@ function MainView({
       return;
     }
 
+    // At most 4 updates a second, and none while the window is minimised
     const interval = setInterval(() => {
+      if (document.hidden) return;
       fetch('/api/logs').then(r => r.json()).then(logs => {
         if (!Array.isArray(logs)) return;
 
@@ -967,7 +984,7 @@ function MainView({
         if (isDone || isError) {
             setIsDownloading(false);
             if (isError) {
-                setDownloadError(true);
+                setDownloadError(criticalErrorReason(logs));
                 if (setAuthErrorDetected) setAuthErrorDetected(Boolean(isAuth));
             } else {
                 setCustomName('');
@@ -1179,7 +1196,10 @@ function LiveDvrView({
   });
   const [isStopping, setIsStopping] = useState(false);
 
-  // Poll live status every second
+  const isRecording = Boolean(recordingStatus?.is_recording);
+
+  // One status read when the view opens; after that, poll once a second only while a recording runs
+  // (or is being stopped), and skip ticks while the window is minimised.
   useEffect(() => {
     const fetchStatus = () => {
       fetch('/api/live_status')
@@ -1195,14 +1215,15 @@ function LiveDvrView({
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 1000);
+    if (!isRecording && !isStopping) return;
+    const interval = setInterval(() => { if (!document.hidden) fetchStatus(); }, 1000);
     return () => clearInterval(interval);
-  }, [isStopping]);
+  }, [isStopping, isRecording]);
 
   const handleStartRecording = async () => {
     if (!liveUrl || recordingStatus.is_recording) return;
     try {
-      await fetch('/api/record_live', {
+      const res = await fetch('/api/record_live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1214,6 +1235,9 @@ function LiveDvrView({
           downloadDir: downloadFolder
         })
       });
+      // The answer carries the new state, which also switches the status polling on
+      const data = await res.json();
+      if (data?.state) setRecordingStatus(data.state);
     } catch(e) {
       console.error(e);
     }
@@ -1246,8 +1270,6 @@ function LiveDvrView({
     }
     return `${mb.toFixed(1)} MB`;
   };
-
-  const isRecording = Boolean(recordingStatus?.is_recording);
 
   return (
     <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
@@ -1427,6 +1449,7 @@ function AdvancedGifMachineView({
   useEffect(() => {
     if (!isDownloading) return;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       fetch('/api/logs').then(r => r.json()).then(logs => {
         if (!Array.isArray(logs)) return;
         const isDone = logs.some(l => typeof l === 'string' && l.includes('Process Finished Successfully!'));
@@ -1434,7 +1457,7 @@ function AdvancedGifMachineView({
         const isStopped = logs.some(l => typeof l === 'string' && l.includes('Process stopped by user.'));
         if (isDone || isError || isStopped) {
           setIsDownloading(false);
-          if (isError) setDownloadError(true);
+          if (isError) setDownloadError(criticalErrorReason(logs));
           fetchHistory();
         }
       }).catch(() => {});
@@ -1498,7 +1521,7 @@ function AdvancedGifMachineView({
         });
         const data = await res.json();
         if (!data.success) {
-          setDownloadError(true);
+          setDownloadError(data.error || true);
           setIsDownloading(false);
         }
       } else {
@@ -1524,7 +1547,7 @@ function AdvancedGifMachineView({
         });
         const data = await res.json();
         if (!data.success) {
-          setDownloadError(true);
+          setDownloadError(data.error || true);
           setIsDownloading(false);
         }
       }
@@ -2234,7 +2257,7 @@ function LogView({ theme, activeSection, setActiveView }: any) {
       }).catch(() => {});
     };
     fetchLogs();
-    const interval = setInterval(fetchLogs, 1000);
+    const interval = setInterval(() => { if (!document.hidden) fetchLogs(); }, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -2322,15 +2345,20 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
   const [isDone, setIsDone] = useState(false);
 
   useEffect(() => {
+    // Stops once the update is done: it used to keep polling and re-ran a forced GitHub update check
+    // every half second for as long as this view stayed open.
+    let done = false;
     const interval = setInterval(() => {
+      if (done || document.hidden) return;
       fetch('/api/logs').then(r => r.json()).then(d => {
-        if (Array.isArray(d)) {
-          setLogs(d);
-          if (d.some(l => l.includes('Update cycle finished.') || l.includes('Process Finished Successfully!'))) {
-            setIsDone(true);
-            setUpdateAvailable(false);
-            checkUpdates(true);
-          }
+        if (done || !Array.isArray(d)) return;
+        setLogs(d);
+        if (d.some(l => l.includes('Update cycle finished.') || l.includes('Process Finished Successfully!'))) {
+          done = true;
+          clearInterval(interval);
+          setIsDone(true);
+          setUpdateAvailable(false);
+          checkUpdates(true);
         }
       }).catch(() => {});
     }, 500);

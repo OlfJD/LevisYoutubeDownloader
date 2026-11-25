@@ -77,6 +77,20 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
+### **v1.1.0-dev** (2026-11-25) - *Robustness pass from `Lessons-from-Blur-AutoClicker.md`*
+- **Verified tool downloads**: the first-run fallback downloads of `yt-dlp.exe` and the FFmpeg zip are only installed when their SHA-256 matches the digest GitHub publishes for that release asset (falling back to the release's `SHA2-256SUMS` / `checksums.sha256`). A mismatch, or no published hash, installs nothing and is logged. `yt-dlp -U` already verifies its own update.
+- **One copy per data folder**: a named mutex `Local\LevisDownloader-<hash of %APPDATA%\LeviDownloader>` is claimed at start. A second launch signals the running copy (named event) to restore and bring its window forward, then quits. Before, a second copy couldn't get port 54321 and both wrote the same settings/history.
+- **Run numbers for background work**: every download, conversion and update gets a run number; Stop and each new job bump it, and a job only acts while its number is current. A stopped job finishing late can't start the aria2c fallback or the GIF conversion any more, and `run_process` only clears its own process reference. Crashes in a job reach the UI as `CRITICAL ERROR: … Details are in errors.log` instead of leaving it on "downloading".
+- **Live DVR clean-up**: each recording thread gets its own state dict, so stopping one and starting the next can't let the old thread's clean-up mark the new recording as stopped or overwrite its file name. Clean-up runs in `finally`. Closing the window now stops running yt-dlp/ffmpeg processes.
+- **Saving**: brief locks (virus scanner, OneDrive) are retried. A settings file that stays locked is never overwritten with defaults; the change is kept in memory, logged, and written with the next save that works. A damaged JSON file is kept as `*.corrupt`. History is never replaced when it can't be read.
+- **`errors.log`** in `%APPDATA%\LeviDownloader`, capped at 64 KB (older half dropped): failed saves, failed tool downloads, crashed jobs.
+- **Limits in one place**: settings are checked on load and on save (unknown keys and out-of-range values dropped). Download / conversion / live requests are checked against one table (formats, frame rates, speed 0.25–4×, times like `00:01:30`, captions ≤ 80 characters) and refused with a one-line reason, which the error popup now shows (also on the GIF screen, where it never appeared).
+- **Less polling**: the Live DVR polls only while a recording runs, polls skip their work while the window is minimised, and the update screen stops polling when it's done (it re-ran a forced GitHub update check every 0.5 s while open).
+- **GIF studio "From your downloads"** sent only the file name, which the backend rejected; names are now looked up in the download folder.
+- **Tests**: `python -m unittest discover -s app_backend/tests -v` (27 tests; temp folders and faked downloads, nothing touches real data).
+- **Not checked**: the real app window (second launch bringing it forward was tested between two processes with a stand-in window), a real first-run download of yt-dlp/FFmpeg (only the GitHub digest lookup ran live), a real live stream, and behaviour with OneDrive/antivirus actually locking the files.
+- **Not done**: trimming WebView2 memory while minimised (needs a measurement first), moving the first-run tool download off the startup path (the window waits for it), version-free release zip names (the README links name `v1.0.4`).
+
 ### **v1.1.0-dev** (2026-11-04) - *Security & Bug-Fix Pass*
 - **Local API no longer exposed to websites or the LAN (`app_backend/backend.py`)**:
   - The Flask server listens on `0.0.0.0` (needed for Wi-Fi Share) and sent `Access-Control-Allow-Origin: *`, so **any website open in the browser** could read `/api/settings` (including the Twitch auth token) or the logs, or start downloads. **Any device on the network** could call every endpoint, including `/api/close` and cookie import/clear.
