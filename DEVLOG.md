@@ -73,6 +73,13 @@ All future releases and updates for this project **MUST** adhere to the **Semant
   - Real-time directory display with 1-click "Open in Windows Explorer" and "Browse/Change" dialog.
   - Persisted destination directory synchronization across all engine recording processes.
 
+- [ ] **Tools: download on first start instead of bundling** (decided 2026-11-25)
+  - *Why*: ffmpeg.exe and ffprobe.exe are ~159 MB each, yt-dlp.exe 17 MB. Bundled into the one-file exe that is ~340 MB, unpacked to a temp folder on **every** launch, and the bundled yt-dlp is already outdated when people install it. The app needs internet to download videos anyway, so first-start downloads cost nothing. Keep only `aria2c.exe` (5 MB) bundled.
+  - *Today*: the spec bundles whatever is in `app_backend/tools/` on the building PC. On a fresh checkout that is only `aria2c.exe`, so a **main** build ships without yt-dlp/FFmpeg and is broken (main never downloads tools; dev does, with a SHA-256 check).
+  - [ ] **First-run progress in the app**: open the window immediately and show "Setting up: downloading FFmpeg 45%" instead of downloading before the window appears (the ~200 MB FFmpeg zip currently blocks startup with no feedback). Backend: run `initialize_assets()` in a background thread, expose its progress (e.g. `/api/setup_status`), block downloads until yt-dlp is ready.
+  - [ ] **Port the verified first-run download to main**: `download_verified()` (GitHub per-asset SHA-256 digest, falling back to the release's `SHA2-256SUMS` / `checksums.sha256`), so main builds stop depending on exes copied in by hand.
+  - [ ] **Build check in `build.bat`**: warn if `app_backend\tools\aria2c.exe` is missing, and refuse (or remove) large leftovers such as `ffmpeg.exe` / `ffprobe.exe` / `yt-dlp.exe` in `app_backend\tools\` so they don't get bundled by accident.
+
 ---
 
 ## 📜 Release History & Changelog
