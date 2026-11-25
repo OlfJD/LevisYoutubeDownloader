@@ -77,6 +77,14 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
+### **v1.1.0-dev** (2026-11-25) - *UI cleanup: dialogs, notices, Log and Update screens*
+- **Shared pieces**: one `Modal` (Esc / click outside closes it, rendered on `<body>` so it covers the whole window), one `Toast`, one `SideNavButton`, one `CornerButton`.
+- **Playlist mode can be switched off again**: Settings has a "Whole playlists" switch (before, the playlist popup turned it on for good). The main screen shows chips for "Whole playlists on" and a name set with Rename, each removable.
+- **Notices** stack at the bottom centre instead of covering the title. The update notice shows both version changes and offers "Update yt-dlp" and/or "New app version" (opens the release page via `/api/open_release`, which only opens our own release URL). The sign-in notice opens Settings on the Sign-in tab.
+- **Log**: filters All / Downloads / Errors (with count), follows new lines, button to open the data folder with `errors.log` (`/api/open_data_folder`, takes no path).
+- **Update screen**: status line with spinner / done / failed; no longer hangs on "Updating…" if the update fails.
+- Rename, playlist, Wi-Fi share and GIF quality dialogs share the dialog style; the main screen stays visible behind Rename. Side arrows have 12px labels; the Log corner button is an icon; the link field has a small clear button.
+
 ### **v1.1.0-dev** (2026-11-25) - *Robustness pass from `Lessons-from-Blur-AutoClicker.md`*
 - **Verified tool downloads**: the first-run fallback downloads of `yt-dlp.exe` and the FFmpeg zip are only installed when their SHA-256 matches the digest GitHub publishes for that release asset (falling back to the release's `SHA2-256SUMS` / `checksums.sha256`). A mismatch, or no published hash, installs nothing and is logged. `yt-dlp -U` already verifies its own update.
 - **One copy per data folder**: a named mutex `Local\LevisDownloader-<hash of %APPDATA%\LeviDownloader>` is claimed at start. A second launch signals the running copy (named event) to restore and bring its window forward, then quits. Before, a second copy couldn't get port 54321 and both wrote the same settings/history.

@@ -13,6 +13,7 @@ import hashlib
 import ctypes
 import functools
 import traceback
+import webbrowser
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, abort
 import ipaddress
@@ -919,6 +920,34 @@ def api_open_folder():
             os.startfile(folder)
         else:
             subprocess.Popen(['xdg-open', folder])
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/open_data_folder', methods=['POST'])
+def api_open_data_folder():
+    """Opens the app's own data folder (errors.log, settings, history). Takes no path from the page."""
+    try:
+        os.makedirs(APPDATA_DIR, exist_ok=True)
+        if os.name == 'nt':
+            os.startfile(APPDATA_DIR)
+        else:
+            subprocess.Popen(['xdg-open', APPDATA_DIR])
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+RELEASES_PAGE = "https://github.com/OlfJD/LevisYoutubeDownloader/releases"
+
+@app.route('/api/open_release', methods=['POST'])
+def api_open_release():
+    """Opens the new release in the default browser. Only the URL from our own update check (or the
+    releases page) is ever opened; nothing from the request is used."""
+    url = cached_update_info.get("app_release_url") or ""
+    if not url.startswith(RELEASES_PAGE + "/"):
+        url = RELEASES_PAGE + "/latest"
+    try:
+        webbrowser.open(url)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})

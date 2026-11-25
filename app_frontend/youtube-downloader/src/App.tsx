@@ -10,10 +10,12 @@ import {
   History, Scissors, Volume2, Check, Video, Play, Sliders,
   Repeat, Crop, Type, Globe, Shield, Download, Cookie, CheckCircle2,
   AlertCircle, Copy, Trash2, Smartphone, Radio, Zap, ListPlus,
-  Layers, QrCode, Key, FileText, Lock, Eye, EyeOff, HelpCircle
+  Layers, QrCode, Key, FileText, Lock, Eye, EyeOff, HelpCircle,
+  Minus, ScrollText, ListVideo, LoaderCircle, CircleCheck, TriangleAlert, LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import QRCode from 'qrcode';
+import { createPortal } from 'react-dom';
 import CustomDropdown, { DropdownOption } from './CustomDropdown';
 
 // -------------------------------------------------------------
@@ -95,6 +97,104 @@ function FolderField({ folder, onChange, onOpen, accent, disabled }: { folder: s
   );
 }
 
+// Centred dialog: dark overlay, card with an icon title and a close button. Esc or a click outside closes it.
+function Modal({ title, icon, accent, onClose, children, width = 480 }: { title: string; icon?: React.ReactNode; accent?: string; onClose: () => void; children: React.ReactNode; width?: number }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  // Portal to <body>: inside an animated (transformed) screen, "fixed" would only cover that screen
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md px-4 pointer-events-auto"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
+        onClick={e => e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label={title}
+        className="w-full p-6 rounded-panel shadow-2xl flex flex-col gap-4 border border-white/10 text-[#D9D9D9]"
+        style={{ maxWidth: width, backgroundColor: '#292a34' }}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xl font-bold text-white flex items-center gap-2.5 min-w-0">
+            {icon && <span className="shrink-0" style={{ color: accent }}>{icon}</span>}
+            <span className="truncate">{title}</span>
+          </h3>
+          <button onClick={onClose} title="Close" className="p-1.5 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors shrink-0">
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </motion.div>
+    </motion.div>,
+    document.body
+  );
+}
+
+const buttonPrimary = "py-2.5 px-4 rounded-control text-xs font-bold uppercase tracking-wider whitespace-nowrap text-white transition-opacity hover:opacity-90 flex items-center justify-center gap-1.5 disabled:opacity-40";
+const buttonSecondary = "py-2.5 px-4 rounded-control text-xs font-bold uppercase tracking-wider whitespace-nowrap text-[#D9D9D9] border border-white/10 hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5";
+
+// Small notice (errors, available updates); App stacks them at the bottom centre, clear of the title
+function Toast({ tone, title, children, actions, onClose }: { tone: 'error' | 'notice'; title: string; children: React.ReactNode; actions?: React.ReactNode; onClose: () => void }) {
+  const dot = tone === 'error' ? '#ef4444' : '#f59e0b';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
+      role={tone === 'error' ? 'alert' : 'status'}
+      className="w-[380px] p-4 rounded-card border flex flex-col gap-3 pointer-events-auto"
+      style={{ backgroundColor: '#292a34f5', borderColor: tone === 'error' ? 'rgba(239,68,68,0.35)' : 'rgba(245,158,11,0.3)', boxShadow: '0 12px 32px rgba(0,0,0,0.45)' }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dot, boxShadow: `0 0 8px ${dot}` }} />
+          <span className="font-bold text-[15px] text-white truncate">{title}</span>
+        </div>
+        <button onClick={onClose} title="Dismiss" className="p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors shrink-0">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="text-[13px] leading-relaxed text-gray-300">{children}</div>
+      {actions && <div className="flex gap-2">{actions}</div>}
+    </motion.div>
+  );
+}
+
+// Tall button on the left / right edge of a screen panel that switches between Live, Downloader and GIF
+function SideNavButton({ side, label, title, accent, onClick }: { side: 'left' | 'right'; label: string; title: string; accent: string; onClick: () => void }) {
+  const Icon = side === 'left' ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      onClick={onClick} title={title} aria-label={title}
+      className={`absolute ${side === 'left' ? '-left-16' : '-right-16'} top-1/2 -translate-y-1/2 z-40 w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1 transition-colors group bg-[#2a2b36] hover:bg-[#31323f]`}
+      style={{ color: accent, border: `1px solid ${accent}4d`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.12), 0 5px 0 #1b1c23, 0 8px 12px rgba(0,0,0,0.25)` }}
+    >
+      <Icon size={26} strokeWidth={3} className={`transition-transform ${side === 'left' ? 'group-hover:-translate-x-0.5' : 'group-hover:translate-x-0.5'}`} />
+      <span className="text-[12px] font-bold tracking-wide">{label}</span>
+    </button>
+  );
+}
+
+// Square button in a bottom corner of the window (Settings, Log)
+function CornerButton({ active, accent, title, onClick, children }: { active: boolean; accent: string; title: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick} title={title} aria-label={title} aria-pressed={active}
+      className="pointer-events-auto w-[52px] h-[52px] rounded-card flex items-center justify-center transition-colors border active:translate-y-[2px]"
+      style={{
+        backgroundColor: active ? `${accent}22` : '#2a2b36',
+        color: active ? accent : '#D9D9D9',
+        borderColor: active ? `${accent}66` : 'rgba(255,255,255,0.05)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12), 0 5px 0 #1b1c23, 0 8px 10px rgba(0,0,0,0.15)'
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 // Native Drag-friendly Title Bar for Borderless Frame
 function CustomTitleBar({ theme }: { theme: any }) {
   const handleMinimize = () => {
@@ -110,8 +210,8 @@ function CustomTitleBar({ theme }: { theme: any }) {
       style={{ backgroundColor: 'rgba(0,0,0,0.18)', borderBottom: '1px solid rgba(255,255,255,0.03)' }}
     >
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold tracking-wider uppercase opacity-40" style={{ color: theme.textSecondary }}>
-          Levi's Downloader · Live DVR & GIF Studio
+        <span className="text-xs font-semibold tracking-wider uppercase text-gray-500">
+          Levi's Downloader
         </span>
       </div>
       <div className="flex items-center gap-1">
@@ -122,7 +222,7 @@ function CustomTitleBar({ theme }: { theme: any }) {
           style={{ color: theme.textMain }}
           title="Minimize"
         >
-          <span className="text-lg leading-none -mt-0.5">—</span>
+          <Minus size={16} />
         </button>
         {/* Close Button */}
         <button 
@@ -173,55 +273,21 @@ function ShareModal({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 backdrop-blur-md px-4 pointer-events-auto"
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0, y: 15 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.95, opacity: 0, y: 15 }}
-        className="w-full max-w-[460px] p-7 rounded-panel border border-white/10 shadow-2xl flex flex-col items-center gap-5 relative overflow-hidden"
-        style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
-      >
-        <button 
-          onClick={onClose} 
-          className="absolute top-5 right-5 p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-        >
-          <X size={20} />
-        </button>
-
-        <div className="flex items-center gap-2 text-blue-400 font-bold tracking-wide uppercase text-xs">
-          <Smartphone size={16} />
-          <span>Local Wi-Fi Quick Share</span>
-        </div>
-
-        <div className="text-center px-4">
-          <h3 className="text-lg font-bold text-white truncate max-w-[360px]">{file.filename}</h3>
-          <p className="text-xs text-gray-400 mt-1">Scan with your iPhone or Android camera on the same Wi-Fi network to save directly to your phone.</p>
-        </div>
-
-        <div className="p-3.5 bg-white rounded-card shadow-2xl flex items-center justify-center">
-          {qrDataUrl ? (
-            <img src={qrDataUrl} alt="QR Code" className="w-[200px] h-[200px] rounded-chip" />
-          ) : (
-            <div className="w-[200px] h-[200px] flex items-center justify-center text-black font-semibold text-xs">Generating QR...</div>
-          )}
-        </div>
-
-        <div className="w-full flex items-center gap-2 p-2.5 rounded-control bg-black/40 border border-white/5 text-xs text-white/80">
-          <span className="truncate flex-1 font-mono text-[11px] opacity-75">{file.shareUrl}</span>
-          <button 
-            onClick={handleCopy} 
-            className="px-3 py-1.5 rounded-chip bg-blue-600 hover:bg-blue-500 font-semibold text-white transition-all shrink-0 text-xs shadow-md"
-          >
-            {copied ? 'Copied!' : 'Copy Link'}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+    <Modal title="Send to your phone" icon={<Smartphone size={20} />} accent={theme.liveAccent} onClose={onClose} width={420}>
+      <p className="text-[13px] text-gray-400 -mt-1">Scan the code with your phone's camera. The phone has to be on the same Wi-Fi as this PC.</p>
+      <div className="self-center p-3 bg-white rounded-card">
+        {qrDataUrl ? (
+          <img src={qrDataUrl} alt="QR code with the download link" className="w-[200px] h-[200px]" />
+        ) : (
+          <div className="w-[200px] h-[200px] flex items-center justify-center text-black text-xs">Making the code…</div>
+        )}
+      </div>
+      <div className="text-center text-[14px] font-semibold text-white truncate" title={file.filename}>{file.filename}</div>
+      <div className="flex items-center gap-2">
+        <div className={`${fieldClass} font-mono text-[11px] truncate select-text`} title={file.shareUrl}>{file.shareUrl}</div>
+        <button onClick={handleCopy} className={`${buttonSecondary} shrink-0`}>{copied ? 'Copied' : 'Copy link'}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -231,7 +297,9 @@ function ShareModal({
 export default function App() {
   const [activeView, setActiveView] = useState<'main' | 'gif_machine' | 'live_dvr' | 'settings' | 'log' | 'update' | 'prename'>('main');
   const [activeSection, setActiveSection] = useState<'downloader' | 'gif' | 'live_dvr'>('downloader');
-  
+  // which right-hand tab Settings opens on (the sign-in error popup opens it on "Sign-in")
+  const [settingsTab, setSettingsTab] = useState<'history' | 'signin'>('history');
+
   const [url, setUrl] = useState('');
   const [customName, setCustomName] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -528,6 +596,8 @@ export default function App() {
 
   const isGifActive = activeView === 'gif_machine' || (activeSection === 'gif' && ['settings', 'log'].includes(activeView));
   const isLiveActive = activeView === 'live_dvr' || (activeSection === 'live_dvr' && ['settings', 'log'].includes(activeView));
+  const sectionAccent = isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent;
+  const sectionHome = activeSection === 'live_dvr' ? 'live_dvr' : activeSection === 'gif' ? 'gif_machine' : 'main';
 
   return (
     <div 
@@ -574,7 +644,7 @@ export default function App() {
         {/* View Switcher Carousel / Container (Standardized Height for Perfect Alignment) */}
         <div className="flex-1 w-full max-w-5xl flex flex-col items-center px-4 relative mt-2">
           <AnimatePresence mode="wait">
-            {activeView === 'main' && (
+            {(activeView === 'main' || activeView === 'prename') && (
               <motion.div
                 key="main"
                 initial={{ opacity: 0, x: -25 }}
@@ -586,8 +656,9 @@ export default function App() {
                 <MainView 
                   url={url} 
                   setUrl={handleUrlChange} 
-                  theme={theme} 
+                  theme={theme}
                   playlistMode={playlistMode}
+                  setPlaylistMode={handlePlaylistModeChange}
                   setActiveView={setActiveView}
                   handleSwitchToGif={handleSwitchToGif}
                   handleSwitchToLiveDvr={handleSwitchToLiveDvr}
@@ -689,8 +760,9 @@ export default function App() {
                 transition={{ duration: 0.15 }}
                 className="w-full h-[580px] flex justify-center items-center"
               >
-                <SettingsView 
-                  theme={theme} 
+                <SettingsView
+                  theme={theme}
+                  initialTab={settingsTab}
                   activeSection={activeSection}
                   setActiveView={setActiveView}
                   playlistMode={playlistMode} 
@@ -781,165 +853,99 @@ export default function App() {
 
         {/* Bottom Navigation Footer (Contextual to active section) */}
         <div className="absolute bottom-6 w-full flex justify-between items-end pointer-events-none px-8 z-30">
-          <button 
-            onClick={() => setActiveView(activeView === 'settings' ? (activeSection === 'live_dvr' ? 'live_dvr' : activeSection === 'gif' ? 'gif_machine' : 'main') : 'settings')} 
-            className="pointer-events-auto rounded-card flex items-center justify-center transition-all active:translate-y-[4px] relative overflow-hidden group border border-white/5 shadow-lg"
-            style={{ 
-              width: '60px', 
-              height: '60px', 
-              backgroundColor: activeView === 'settings' ? `${isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent}22` : theme.btnDarkBg, 
-              color: activeView === 'settings' ? (isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent) : theme.btnDarkText, 
-              borderColor: activeView === 'settings' ? `${isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent}66` : 'rgba(255,255,255,0.05)',
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` 
-            }}
-            title={activeSection === 'live_dvr' ? "Live DVR Settings" : activeSection === 'gif' ? "GIF Machine Settings" : "Downloader Settings"}
+          <CornerButton
+            active={activeView === 'settings'} accent={sectionAccent}
+            title={activeView === 'settings' ? 'Close settings' : 'Settings'}
+            onClick={() => { setSettingsTab('history'); setActiveView(activeView === 'settings' ? sectionHome : 'settings'); }}
           >
-            <Settings strokeWidth={1.5} size={30} style={activeView === 'settings' ? { filter: `drop-shadow(0 2px 8px ${isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent}88)` } : {}} />
-          </button>
-
-          <button 
-            onClick={() => setActiveView(activeView === 'log' ? (activeSection === 'live_dvr' ? 'live_dvr' : activeSection === 'gif' ? 'gif_machine' : 'main') : 'log')} 
-            className="pointer-events-auto rounded-card flex items-center justify-center transition-all active:translate-y-[4px] text-[18px] font-bold border border-white/5 shadow-lg"
-            style={{ 
-              width: '60px', 
-              height: '60px', 
-              backgroundColor: activeView === 'log' ? `${isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent}22` : theme.btnDarkBg, 
-              color: activeView === 'log' ? (isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent) : theme.btnDarkText,
-              borderColor: activeView === 'log' ? `${isLiveActive ? theme.liveAccent : isGifActive ? theme.gifAccent : theme.accent}66` : 'rgba(255,255,255,0.05)',
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 10px rgba(0,0,0,0.15)` 
-            }}
-            title="Open Stream & Process Log"
+            <Settings strokeWidth={1.75} size={24} />
+          </CornerButton>
+          <CornerButton
+            active={activeView === 'log'} accent={sectionAccent}
+            title={activeView === 'log' ? 'Close log' : 'Log'}
+            onClick={() => setActiveView(activeView === 'log' ? sectionHome : 'log')}
           >
-            LOG
-          </button>
+            <ScrollText strokeWidth={1.75} size={24} />
+          </CornerButton>
         </div>
 
-        {/* Update Available Notification Popup */}
+        {/* Notices, stacked at the bottom centre between the Settings and Log buttons */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-3 items-center pointer-events-none">
+        {/* Update available */}
         <AnimatePresence>
           {updateAvailable && showUpdatePopup && activeView === 'main' && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className="absolute top-6 right-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-panel border border-amber-500/20 shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[380px]"
-              style={{ backgroundColor: `${theme.panelOuter}f2`, color: theme.textMain, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 36px rgba(0,0,0,0.4)` }}
+            <Toast
+              tone="notice" title="Update available" onClose={() => setShowUpdatePopup(false)}
+              actions={<>
+                {(updateInfo?.ytdlp_update || !updateInfo?.app_update) && (
+                  <button onClick={() => { setShowUpdatePopup(false); handleUpdate(); }} className={`${buttonPrimary} flex-1`} style={{ backgroundColor: theme.accent }}>
+                    <RefreshCcw size={14} /><span>Update yt-dlp</span>
+                  </button>
+                )}
+                {updateInfo?.app_update && (
+                  <button
+                    onClick={() => { setShowUpdatePopup(false); fetch('/api/open_release', { method: 'POST' }).catch(() => {}); }}
+                    className={updateInfo?.ytdlp_update ? `${buttonSecondary} flex-1` : `${buttonPrimary} flex-1`}
+                    style={updateInfo?.ytdlp_update ? undefined : { backgroundColor: theme.accent }}
+                    title="Opens the release page in your browser"
+                  >
+                    New app version
+                  </button>
+                )}
+              </>}
             >
-              <div className="flex items-center justify-between gap-4 relative z-10">
-                <div className="flex items-center gap-3">
-                  <div className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-                  </div>
-                  <span className="font-bold tracking-wide text-lg text-white">Update Available</span>
+              {updateInfo?.ytdlp_update || updateInfo?.app_update ? (
+                <div className="flex flex-col gap-0.5">
+                  {updateInfo?.ytdlp_update && <span>yt-dlp {updateInfo.ytdlp_current} → <strong className="text-white">{updateInfo.ytdlp_latest}</strong></span>}
+                  {updateInfo?.app_update && <span>Levi's Downloader {updateInfo.app_current} → <strong className="text-white">{updateInfo.app_latest}</strong></span>}
                 </div>
-                <button onClick={() => setShowUpdatePopup(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
-              </div>
-              <p className="text-sm font-medium relative z-10 leading-relaxed" style={{ color: theme.textSecondary }}>
-                {updateInfo?.message || "A new update is available for yt-dlp engine or Levi's Downloader. Click below to install."}
-              </p>
-              <button
-                 onClick={() => { setShowUpdatePopup(false); handleUpdate(); }}
-                 className="mt-2 font-bold py-2.5 px-4 rounded-card transition-all active:translate-y-[2px] flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
-                 style={{ backgroundColor: theme.accent, color: '#ffffff', boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 rgba(0,0,0,0.3)` }}
-              >
-                <RefreshCcw size={16} />
-                <span>Update Tool Now</span>
-              </button>
-            </motion.div>
+              ) : (updateInfo?.message || "A newer version is available.")}
+            </Toast>
           )}
         </AnimatePresence>
 
-        {/* Download Error Notification Popup */}
+        {/* Download failed */}
         <AnimatePresence>
           {downloadError && (activeView === 'main' || activeView === 'gif_machine') && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.9 }}
-              className="absolute top-6 left-6 pointer-events-auto z-50 flex flex-col gap-3 p-5 rounded-panel border shadow-2xl backdrop-blur-3xl overflow-hidden group max-w-[340px]"
-              style={{ 
-                backgroundColor: `${theme.panelOuter}f2`, 
-                color: theme.textMain, 
-                borderColor: authErrorDetected ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.1)',
-                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.1), 0 10px 30px rgba(0,0,0,0.4)` 
-              }}
+            <Toast
+              tone="error" title={authErrorDetected ? 'Sign-in needed' : 'Download failed'} onClose={() => setDownloadError(false)}
+              actions={authErrorDetected ? (<>
+                <button onClick={() => { setDownloadError(false); setSettingsTab('signin'); setActiveView('settings'); }} className={`${buttonPrimary} flex-1`} style={{ backgroundColor: sectionAccent }}>
+                  <LogIn size={14} /><span>Sign-in settings</span>
+                </button>
+                <button onClick={() => { setDownloadError(false); setActiveView('log'); }} className={buttonSecondary}>Log</button>
+              </>) : (<>
+                <button onClick={() => { setDownloadError(false); setActiveView('log'); }} className={`${buttonPrimary} flex-1`} style={{ backgroundColor: sectionAccent }}>
+                  <ScrollText size={14} /><span>Show log</span>
+                </button>
+                <button onClick={() => { setDownloadError(false); handleUpdate(); }} className={buttonSecondary} title="An outdated yt-dlp is the most common cause of failed downloads">
+                  Update yt-dlp
+                </button>
+              </>)}
             >
-              <div className="flex items-center justify-between gap-4 relative z-10">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${authErrorDetected ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
-                  <span className="font-bold tracking-wide text-base text-white">
-                    {authErrorDetected ? "Subscriber / Auth Required" : "Download Failed"}
-                  </span>
-                </div>
-                <button onClick={() => setDownloadError(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
-              </div>
-              <p className="text-xs font-medium relative z-10 leading-relaxed text-gray-300">
-                {authErrorDetected
-                  ? "This Twitch VOD or stream is subscriber-only or requires account login. Configure credentials in Cookie Settings."
-                  : typeof downloadError === 'string'
-                    ? downloadError
-                    : "The download process encountered an error. Check logs for details or update the tool."}
-              </p>
-              <div className="flex gap-2 mt-1">
-                {authErrorDetected ? (
-                  <>
-                    <button
-                       onClick={() => { setDownloadError(false); setActiveView('settings'); }}
-                       className="flex-1 font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-500 text-white shadow-md cursor-pointer"
-                    >
-                      <Key size={13} />
-                      <span>Cookie Settings</span>
-                    </button>
-                    <button
-                       onClick={() => { setDownloadError(false); setActiveView('log'); }}
-                       className="font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
-                    >
-                      Logs
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                       onClick={() => { setDownloadError(false); handleUpdate(); }}
-                       className="flex-1 font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs flex items-center justify-center gap-1.5 text-white cursor-pointer"
-                       style={{ backgroundColor: theme.accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 rgba(0,0,0,0.3)` }}
-                    >
-                      Update Tool
-                    </button>
-                    <button
-                       onClick={() => { setDownloadError(false); setActiveView('log'); }}
-                       className="font-bold py-2 px-3 rounded-control transition-all active:translate-y-[2px] text-xs bg-white/10 hover:bg-white/20 text-white border border-white/10 cursor-pointer"
-                    >
-                      Logs
-                    </button>
-                  </>
-                )}
-              </div>
-            </motion.div>
+              {authErrorDetected
+                ? 'This video needs a signed-in account (members-only, age-restricted or a Twitch sub VOD). Add your login under Settings, Sign-in.'
+                : typeof downloadError === 'string'
+                  ? downloadError
+                  : 'Something went wrong. The log says what happened; an outdated yt-dlp is the most common cause.'}
+            </Toast>
           )}
         </AnimatePresence>
+        </div>
 
-        {/* Playlist Detected Modal */}
+        {/* Playlist link pasted while "Whole playlists" is off */}
         <AnimatePresence>
           {showPlaylistPopup && (
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 pointer-events-auto"
-            >
-              <motion.div 
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="w-full max-w-[550px] p-8 rounded-panel shadow-2xl flex flex-col gap-6 relative"
-                style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
-              >
-                <button onClick={() => setShowPlaylistPopup(false)} className="absolute top-6 right-6 hover:scale-110 active:scale-95"><X size={32} /></button>
-                <h3 className="text-[32px] font-medium text-center mt-2">Playlist Detected</h3>
-                <p className="text-[20px] text-center opacity-80 leading-relaxed px-2">You pasted a playlist link, but Playlist Mode is off. Would you like to turn it on to download the entire list?</p>
-                <div className="flex flex-col gap-4 mt-4">
-                  <button onClick={() => { handlePlaylistModeChange(true); setShowPlaylistPopup(false); }} className="py-4 rounded-control font-bold text-[22px]" style={{ backgroundColor: theme.accent, color: '#fff', boxShadow: `0 4px 0 #99001b` }}>Turn On & Download All</button>
-                  <button onClick={() => setShowPlaylistPopup(false)} className="py-4 rounded-control font-bold text-[22px] border-[3px]" style={{ borderColor: theme.btnDarkBorder, color: theme.textMain }}>No, just this video</button>
-                </div>
-              </motion.div>
-            </motion.div>
+            <Modal title="Playlist link" icon={<ListVideo size={20} />} accent={theme.accent} onClose={() => setShowPlaylistPopup(false)} width={460}>
+              <p className="text-[14px] text-gray-300 -mt-1 leading-relaxed">This link belongs to a playlist. Download every video in it, or only this one?</p>
+              <div className="flex flex-col gap-2.5">
+                <button onClick={() => { handlePlaylistModeChange(true); setShowPlaylistPopup(false); }} className={buttonPrimary} style={{ backgroundColor: theme.accent }}>
+                  <ListVideo size={14} /><span>Whole playlist</span>
+                </button>
+                <button onClick={() => setShowPlaylistPopup(false)} className={buttonSecondary}>Only this video</button>
+              </div>
+              <p className="text-[12px] text-gray-500">You can change this any time under Settings, Whole playlists.</p>
+            </Modal>
           )}
         </AnimatePresence>
       </div>
@@ -951,7 +957,7 @@ export default function App() {
 // ORIGINAL PAGE 1 VIEW: Faithful 100% OG Layout + Dual Left & Right Glide Arrows
 // -------------------------------------------------------------
 function MainView({ 
-  url, setUrl, theme, playlistMode, setActiveView, handleSwitchToGif, handleSwitchToLiveDvr,
+  url, setUrl, theme, playlistMode, setPlaylistMode, setActiveView, handleSwitchToGif, handleSwitchToLiveDvr,
   startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, 
   setDownloadError, authErrorDetected, setAuthErrorDetected, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, 
   showUpdatePopup, setShowUpdatePopup, splitChapters, setSplitChapters, onShareFile
@@ -1027,69 +1033,24 @@ function MainView({
   return (
     <div className="w-[1050px] h-[580px] flex justify-center items-center relative">
       
-      {/* Symmetrical Floating Left Button -> Live Stream DVR (Sapphire Blue #3B82F6) */}
-      <div 
-        className="absolute -left-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40" 
-        onClick={handleSwitchToLiveDvr}
-      >
-        <button 
-          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
-          style={{ 
-            backgroundColor: theme.btnDarkBg, 
-            color: theme.liveAccent,
-            border: `1px solid rgba(59, 130, 246, 0.3)`,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)` 
-          }}
-          title="Switch to Live Stream DVR & Broadcast Recorder"
-        >
-          <ChevronLeft size={28} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" style={{ color: theme.liveAccent, filter: `drop-shadow(0 2px 8px ${theme.liveAccent}88)` }} />
-          <span 
-            className="text-[10px] font-black uppercase tracking-wider"
-            style={{ color: theme.liveAccent, textShadow: `0 2px 10px ${theme.liveAccent}aa` }}
-          >
-            DVR
-          </span>
-        </button>
-      </div>
-
-      {/* Symmetrical Floating Right Button -> GIF Machine (Amber Yellow #F59E0B) */}
-      <div 
-        className="absolute -right-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40" 
-        onClick={handleSwitchToGif}
-      >
-        <button 
-          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
-          style={{ 
-            backgroundColor: theme.btnDarkBg, 
-            color: theme.gifAccent,
-            border: `1px solid rgba(245, 158, 11, 0.25)`,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)` 
-          }}
-          title="Switch to Advanced GIF Machine"
-        >
-          <ChevronRight size={28} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" style={{ color: theme.gifAccent, filter: `drop-shadow(0 2px 8px ${theme.gifAccent}88)` }} />
-          <span 
-            className="text-[11px] font-black uppercase tracking-wider"
-            style={{ color: theme.gifAccent, textShadow: `0 2px 10px ${theme.gifAccent}aa` }}
-          >
-            GIF
-          </span>
-        </button>
-      </div>
+      <SideNavButton side="left" label="Live" title="Live recorder" accent={theme.liveAccent} onClick={handleSwitchToLiveDvr} />
+      <SideNavButton side="right" label="GIF" title="GIF studio" accent={theme.gifAccent} onClick={handleSwitchToGif} />
 
       <motion.div layout className="w-full max-w-[800px] flex flex-col items-center relative gap-8 my-auto">
         {/* Input Area with Inline Stop Button */}
         <div className="w-full relative flex gap-3 h-[46px] items-center">
           <div className="flex-1 flex h-full rounded-control overflow-hidden p-[2px] shadow-inner relative z-10 transition-all" style={{ backgroundColor: theme.inputBg }}>
             <input 
-              type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste Video Link (YouTube, TikTok, Twitter, Any Site)..." 
-              className="flex-1 bg-transparent px-4 py-[3px] outline-none font-medium placeholder:opacity-60 text-[19px] disabled:opacity-50 tracking-wide" style={{ color: theme.inputText }}
+              type="text" value={url} onChange={(e) => setUrl(e.target.value)} disabled={isDownloading} placeholder="Paste a video link: YouTube, TikTok, X, Twitch and more"
+              aria-label="Video link"
+              className="flex-1 min-w-0 bg-transparent px-4 py-[3px] outline-none font-medium placeholder:opacity-60 text-[19px] disabled:opacity-50 tracking-wide" style={{ color: theme.inputText }}
             />
-            <div className="w-[3px] h-[28px] overflow-hidden rounded-full self-center ml-3 mr-1" style={{ backgroundColor: theme.inputText }}></div>
-            <button 
-              onClick={() => setUrl('')} disabled={!url || isDownloading}
-              className="flex items-center justify-center transition-all hover:opacity-70 active:translate-y-[4px] disabled:opacity-50 mr-2" style={{ color: theme.inputText }}
-            ><X size={34} strokeWidth={2.5} /></button>
+            {url && !isDownloading && (
+              <button
+                onClick={() => setUrl('')} title="Clear link"
+                className="w-9 h-9 my-auto mr-1 rounded-chip flex items-center justify-center hover:bg-black/10 transition-colors shrink-0" style={{ color: theme.inputText }}
+              ><X size={20} strokeWidth={2.5} /></button>
+            )}
           </div>
 
           <AnimatePresence>
@@ -1105,7 +1066,27 @@ function MainView({
             )}
           </AnimatePresence>
         </div>
-        
+
+        {/* What the next download will do differently: visible, and removable with one click */}
+        {!isDownloading && (customName || playlistMode) && (
+          <div className="flex gap-2 -mt-4 flex-wrap justify-center">
+            {customName && (
+              <span className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full text-[12px] font-semibold bg-white/[0.06] border border-white/10 text-[#D9D9D9] max-w-[420px]">
+                <PenLine size={13} className="shrink-0 text-gray-400" />
+                <span className="truncate">Saving as "{customName}"</span>
+                <button onClick={() => setCustomName('')} title="Use the video's own name" className="p-0.5 rounded-full hover:bg-white/10 shrink-0"><X size={13} /></button>
+              </span>
+            )}
+            {playlistMode && (
+              <span className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full text-[12px] font-semibold bg-white/[0.06] border border-white/10 text-[#D9D9D9]">
+                <ListVideo size={13} className="shrink-0 text-gray-400" />
+                <span>Whole playlists on</span>
+                <button onClick={() => setPlaylistMode(false)} title="Download single videos only" className="p-0.5 rounded-full hover:bg-white/10 shrink-0"><X size={13} /></button>
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Waveform & Video Name */}
         <AnimatePresence initial={false}>
           {isDownloading && (
@@ -1274,27 +1255,7 @@ function LiveDvrView({
   return (
     <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
 
-      {/* Right arrow back to the downloader */}
-      <div
-        onClick={handleSwitchToMain}
-        className="absolute -right-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40"
-      >
-        <button
-          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
-          style={{
-            backgroundColor: theme.btnDarkBg,
-            color: theme.liveAccent,
-            border: `1px solid rgba(59, 130, 246, 0.3)`,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)`
-          }}
-          title="Back to Downloader"
-        >
-          <ChevronRight size={28} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" style={{ color: theme.liveAccent, filter: `drop-shadow(0 2px 8px ${theme.liveAccent}88)` }} />
-          <span className="text-[11px] font-black uppercase tracking-wider" style={{ color: theme.liveAccent, textShadow: `0 2px 10px ${theme.liveAccent}aa` }}>
-            MAIN
-          </span>
-        </button>
-      </div>
+      <SideNavButton side="right" label="Main" title="Back to the downloader" accent={theme.liveAccent} onClick={handleSwitchToMain} />
 
       {/* Left: what to record */}
       <div className="flex-1 rounded-card p-6 flex flex-col justify-between min-w-0" style={{ backgroundColor: theme.panelInner }}>
@@ -1584,7 +1545,7 @@ function AdvancedGifMachineView({
   ];
 
   const maxFileSizeOptions: DropdownOption[] = [
-    { value: 'none', label: 'No Limit (Max Fidelity)' },
+    { value: 'none', label: 'No limit' },
     { value: '8M', label: 'Discord Free (8 MB)', badge: '8MB' },
     { value: '15M', label: 'Twitter / X (15 MB)', badge: '15MB' },
     { value: '25M', label: 'Discord Nitro (25 MB)', badge: '25MB' },
@@ -1602,27 +1563,7 @@ function AdvancedGifMachineView({
   return (
     <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex gap-6 relative" style={{ backgroundColor: theme.panelOuter }}>
 
-      {/* Left arrow back to the downloader */}
-      <div
-        onClick={handleSwitchToMain}
-        className="absolute -left-16 top-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer z-40"
-      >
-        <button
-          className="w-12 h-28 rounded-card flex flex-col items-center justify-center gap-1.5 transition-all group-hover:scale-110 active:scale-95 relative overflow-hidden"
-          style={{
-            backgroundColor: theme.btnDarkBg,
-            color: accent,
-            border: `1px solid rgba(245, 158, 11, 0.25)`,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 5px 0 ${theme.btnDarkBorder}, 0 8px 12px rgba(0,0,0,0.25)`
-          }}
-          title="Back to Downloader"
-        >
-          <ChevronLeft size={28} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" style={{ color: accent, filter: `drop-shadow(0 2px 8px ${accent}88)` }} />
-          <span className="text-[11px] font-black uppercase tracking-wider" style={{ color: accent, textShadow: `0 2px 10px ${accent}aa` }}>
-            MAIN
-          </span>
-        </button>
-      </div>
+      <SideNavButton side="left" label="Main" title="Back to the downloader" accent={accent} onClick={handleSwitchToMain} />
 
       {/* Left: pick one source */}
       <div className="flex-1 rounded-card p-6 flex flex-col min-w-0" style={{ backgroundColor: theme.panelInner }}>
@@ -1786,77 +1727,51 @@ function AdvancedGifMachineView({
       {/* Quality settings */}
       <AnimatePresence>
         {showQualityModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md px-4 pointer-events-auto"
-            onClick={() => setShowQualityModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={e => e.stopPropagation()}
-              className="w-full max-w-[480px] p-6 rounded-panel shadow-2xl flex flex-col gap-4 relative border border-white/10"
-              style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2.5"><Sliders size={20} style={{ color: accent }} />Quality</h3>
-                <button onClick={() => setShowQualityModal(false)} className="p-1.5 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title="Close">
-                  <X size={18} />
-                </button>
-              </div>
+          <Modal title="Quality" icon={<Sliders size={20} />} accent={accent} onClose={() => setShowQualityModal(false)}>
+            <div className="flex flex-col">
+            <SettingRow label="Frame rate" hint="Lower is smaller">
+              <CustomDropdown
+                value={fps}
+                options={[
+                  { value: 'original', label: 'Original' },
+                  { value: '60', label: '60 FPS' }, { value: '50', label: '50 FPS' }, { value: '30', label: '30 FPS' },
+                  { value: '24', label: '24 FPS' }, { value: '15', label: '15 FPS' },
+                ]}
+                onChange={setFps} theme={theme} accentColor={accent} minWidth={170}
+              />
+            </SettingRow>
+            <SettingRow label="Resolution">
+              <CustomDropdown
+                value={scale}
+                options={[
+                  { value: 'original', label: 'Original' },
+                  { value: '1080p', label: '1080p' }, { value: '720p', label: '720p' },
+                  { value: '480p', label: '480p' }, { value: '360p', label: '360p' },
+                ]}
+                onChange={setScale} theme={theme} accentColor={accent} minWidth={170}
+              />
+            </SettingRow>
+            <SettingRow label="Dithering" hint="GIFs only">
+              <CustomDropdown
+                value={dither}
+                options={[
+                  { value: 'bayer', label: 'Bayer (pattern)', desc: 'Good default' },
+                  { value: 'sierra', label: 'Sierra (smooth)', desc: 'Best for gradients' },
+                  { value: 'floyd', label: 'Floyd-Steinberg', desc: 'Fine detail' },
+                  { value: 'none', label: 'None', desc: 'Flat colours, cartoons' },
+                ]}
+                onChange={setDither} theme={theme} accentColor={accent} minWidth={170}
+              />
+            </SettingRow>
+            <SettingRow label="Size limit">
+              <CustomDropdown value={maxFileSize} options={maxFileSizeOptions} onChange={setMaxFileSize} theme={theme} accentColor={accent} minWidth={170} />
+            </SettingRow>
+          </div>
 
-              <div className="flex flex-col">
-                <SettingRow label="Frame rate" hint="Lower is smaller">
-                  <CustomDropdown
-                    value={fps}
-                    options={[
-                      { value: 'original', label: 'Original' },
-                      { value: '60', label: '60 FPS' }, { value: '50', label: '50 FPS' }, { value: '30', label: '30 FPS' },
-                      { value: '24', label: '24 FPS' }, { value: '15', label: '15 FPS' },
-                    ]}
-                    onChange={setFps} theme={theme} accentColor={accent} minWidth={170}
-                  />
-                </SettingRow>
-                <SettingRow label="Resolution">
-                  <CustomDropdown
-                    value={scale}
-                    options={[
-                      { value: 'original', label: 'Original' },
-                      { value: '1080p', label: '1080p' }, { value: '720p', label: '720p' },
-                      { value: '480p', label: '480p' }, { value: '360p', label: '360p' },
-                    ]}
-                    onChange={setScale} theme={theme} accentColor={accent} minWidth={170}
-                  />
-                </SettingRow>
-                <SettingRow label="Dithering" hint="GIFs only">
-                  <CustomDropdown
-                    value={dither}
-                    options={[
-                      { value: 'bayer', label: 'Bayer (pattern)', desc: 'Good default' },
-                      { value: 'sierra', label: 'Sierra (smooth)', desc: 'Best for gradients' },
-                      { value: 'floyd', label: 'Floyd-Steinberg', desc: 'Fine detail' },
-                      { value: 'none', label: 'None', desc: 'Flat colours, cartoons' },
-                    ]}
-                    onChange={setDither} theme={theme} accentColor={accent} minWidth={170}
-                  />
-                </SettingRow>
-                <SettingRow label="Size limit">
-                  <CustomDropdown value={maxFileSize} options={maxFileSizeOptions} onChange={setMaxFileSize} theme={theme} accentColor={accent} minWidth={170} />
-                </SettingRow>
-              </div>
-
-              <button
-                onClick={() => setShowQualityModal(false)}
-                className="w-full py-3 rounded-control font-bold text-sm uppercase tracking-wider text-black transition-all active:scale-[0.98]"
-                style={{ backgroundColor: accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 #b45309` }}
-              >
-                Done
-              </button>
-            </motion.div>
-          </motion.div>
+            <button onClick={() => setShowQualityModal(false)} className={buttonPrimary} style={{ backgroundColor: accent, color: '#111' }}>
+              Done
+            </button>
+          </Modal>
         )}
       </AnimatePresence>
     </div>
@@ -1866,8 +1781,8 @@ function AdvancedGifMachineView({
 // -------------------------------------------------------------
 // CONTEXTUAL SETTINGS VIEW: Dedicated Dev Settings, Turbo aria2c & History
 // -------------------------------------------------------------
-function SettingsView({ 
-  theme, activeSection, setActiveView, 
+function SettingsView({
+  theme, initialTab, activeSection, setActiveView,
   playlistMode, setPlaylistMode, 
   quality, setQuality,
   sponsorBlock, setSponsorBlock,
@@ -1897,7 +1812,7 @@ function SettingsView({
   const [isSavingToken, setIsSavingToken] = useState(false);
   const [showTokenText, setShowTokenText] = useState(false);
   const [showTwitchHelp, setShowTwitchHelp] = useState(false);
-  const [rightTab, setRightTab] = useState<'history' | 'signin'>('history');
+  const [rightTab, setRightTab] = useState<'history' | 'signin'>(initialTab === 'signin' && activeSection !== 'gif' ? 'signin' : 'history');
 
   useEffect(() => {
     if (twitchToken) setTwitchTokenInput(twitchToken);
@@ -2073,16 +1988,19 @@ function SettingsView({
               <SettingRow label="Video quality">
                 <CustomDropdown value={quality} options={qualityOptions} onChange={setQuality} theme={theme} size="sm" accentColor={accentColor} minWidth={170} />
               </SettingRow>
-              <SettingRow label="Video codec" hint="H.264 plays everywhere, AV1 makes smaller files">
+              <SettingRow label="Video codec">
                 <CustomDropdown value={videoCodec} options={codecOptions} onChange={setVideoCodec} theme={theme} size="sm" accentColor={accentColor} minWidth={170} />
               </SettingRow>
-              <SettingRow icon={<Zap size={16} />} label="Turbo downloads" hint="Downloads in 16 parallel parts, falls back automatically">
+              <SettingRow icon={<ListVideo size={16} />} label="Whole playlists" hint="A playlist link downloads every video in it">
+                <Toggle on={playlistMode} onChange={setPlaylistMode} accent={accentColor} label="Whole playlists" />
+              </SettingRow>
+              <SettingRow icon={<Zap size={16} />} label="Turbo downloads" hint="16 parallel parts, falls back automatically">
                 <Toggle on={turboMode} onChange={setTurboMode} accent={accentColor} label="Turbo downloads" />
               </SettingRow>
               <SettingRow icon={<ListPlus size={16} />} label="Split into chapters" hint="One file per chapter, for albums and DJ sets">
                 <Toggle on={splitChapters} onChange={setSplitChapters} accent={accentColor} label="Split into chapters" />
               </SettingRow>
-              <SettingRow icon={<Shield size={16} />} label="Skip sponsor segments" hint="Cuts sponsor, intro and outro parts (SponsorBlock)">
+              <SettingRow icon={<Shield size={16} />} label="Skip sponsor segments" hint="Cuts sponsors, intros and outros (SponsorBlock)">
                 <Toggle on={sponsorBlock} onChange={setSponsorBlock} accent={accentColor} label="Skip sponsor segments" />
               </SettingRow>
             </div>
@@ -2116,8 +2034,8 @@ function SettingsView({
           <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 flex flex-col gap-5">
             {/* Status */}
             <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-control bg-white/[0.04] border border-white/[0.06]">
-              <Cookie size={16} className={cookieStatus?.hasCookies ? 'text-emerald-400' : 'text-gray-500'} />
-              <span className="text-[13px] text-[#D9D9D9] truncate">
+              <Cookie size={16} className={`shrink-0 ${cookieStatus?.hasCookies ? 'text-emerald-400' : 'text-gray-500'}`} />
+              <span className="text-[13px] text-[#D9D9D9] leading-snug min-w-0">
                 {cookieStatus?.hasCookies ? cookieStatus.summary : 'No cookies stored. Needed only for members-only, age-restricted or sub-only videos.'}
               </span>
             </div>
@@ -2249,6 +2167,8 @@ function LogView({ theme, activeSection, setActiveView }: any) {
   const [logs, setLogs] = useState<string[]>([]);
   const [filter, setFilter] = useState<'all' | 'engine' | 'errors'>('all');
   const [copied, setCopied] = useState(false);
+  const boxRef = React.useRef<HTMLDivElement>(null);
+  const stickToBottom = React.useRef(true);
 
   useEffect(() => {
     const fetchLogs = () => {
@@ -2261,75 +2181,73 @@ function LogView({ theme, activeSection, setActiveView }: any) {
     return () => clearInterval(interval);
   }, []);
 
+  // Follow new lines while the view is scrolled to the bottom; leave it alone once the user scrolls up
+  useEffect(() => {
+    const box = boxRef.current;
+    if (box && stickToBottom.current) box.scrollTop = box.scrollHeight;
+  }, [logs, filter]);
+
   const handleCopyLogs = () => {
-    navigator.clipboard.writeText(logs.join('\n'));
+    navigator.clipboard.writeText(logs.join('\n')).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const isErrorLine = (l: string) => /error|critical|failed/i.test(l);
   const filteredLogs = logs.filter(l => {
-    if (filter === 'errors') return l.toLowerCase().includes('error') || l.toLowerCase().includes('critical') || l.toLowerCase().includes('failed');
-    if (filter === 'engine') return l.includes('[download]') || l.includes('[ffmpeg]') || l.includes('[Merger]') || l.includes('[ChapterSplit]');
+    if (filter === 'errors') return isErrorLine(l);
+    if (filter === 'engine') return /^\[(download|ffmpeg|Merger|ExtractAudio|ChapterSplit)\]/.test(l);
     return true;
   });
-
+  const errorCount = logs.filter(isErrorLine).length;
   const accentColor = activeSection === 'live_dvr' ? theme.liveAccent : activeSection === 'gif' ? theme.gifAccent : theme.accent;
 
   return (
-    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelOuter }}>
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-[24px] font-bold text-white">Stream & Process Log</h2>
-            <div className="flex gap-1.5 p-1 rounded-control bg-black/40 border border-white/5">
-              <button 
-                onClick={() => setFilter('all')} 
-                className={`px-3 py-1 rounded-chip text-xs font-bold transition-all ${filter === 'all' ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white'}`}
-              >
-                All Logs ({logs.length})
-              </button>
-              <button 
-                onClick={() => setFilter('engine')} 
-                className={`px-3 py-1 rounded-chip text-xs font-bold transition-all ${filter === 'engine' ? 'bg-white/15 text-white' : 'text-gray-400 hover:text-white'}`}
-              >
-                Engine Stream
-              </button>
-              <button 
-                onClick={() => setFilter('errors')} 
-                className={`px-3 py-1 rounded-chip text-xs font-bold transition-all ${filter === 'errors' ? 'bg-red-500/20 text-red-400' : 'text-gray-400 hover:text-white'}`}
-              >
-                Errors Only
-              </button>
+    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex" style={{ backgroundColor: theme.panelOuter }}>
+      <div className="flex-1 rounded-card p-6 flex flex-col min-w-0" style={{ backgroundColor: theme.panelInner }}>
+        <PanelTitle aside={
+          <div className="flex items-center gap-2">
+            <div className="flex p-1 rounded-control bg-[#17171d] border border-white/[0.06]" role="tablist">
+              {([['all', `All (${logs.length})`], ['engine', 'Downloads'], ['errors', `Errors${errorCount ? ` (${errorCount})` : ''}`]] as const).map(([key, label]) => (
+                <button
+                  key={key} role="tab" aria-selected={filter === key} onClick={() => setFilter(key)}
+                  className={`px-3 py-1 rounded-chip text-xs font-bold transition-colors ${filter === key ? (key === 'errors' ? 'bg-red-500/20 text-red-300' : 'bg-white/10 text-white') : 'text-gray-400 hover:text-white'}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+            <button onClick={handleCopyLogs} className={buttonSecondary} title="Copy the whole log">
+              <Copy size={14} /><span>{copied ? 'Copied' : 'Copy'}</span>
+            </button>
+            <button onClick={() => fetch('/api/open_data_folder', { method: 'POST' }).catch(() => {})} className={buttonSecondary} title="Open the folder with errors.log, settings and history">
+              <FolderOpen size={14} /><span>errors.log</span>
+            </button>
           </div>
+        }>
+          Log
+        </PanelTitle>
 
-          <button 
-            onClick={handleCopyLogs}
-            className="px-3.5 py-1.5 rounded-control text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white flex items-center gap-1.5"
-          >
-            <Copy size={14} />
-            <span>{copied ? 'Copied!' : 'Copy All'}</span>
-          </button>
-        </div>
-
-        {/* Terminal Window */}
-        <div className="w-full h-[450px] p-4 rounded-card bg-black/70 border border-white/10 font-mono text-xs overflow-y-auto custom-scrollbar flex flex-col gap-1 shadow-inner select-text">
+        <div
+          ref={boxRef}
+          onScroll={e => { const b = e.currentTarget; stickToBottom.current = b.scrollHeight - b.scrollTop - b.clientHeight < 24; }}
+          className="flex-1 min-h-0 px-4 py-3 rounded-control bg-[#17171d] border border-white/[0.06] font-mono text-[12px] leading-relaxed overflow-y-auto custom-scrollbar select-text"
+        >
           {filteredLogs.length > 0 ? (
             filteredLogs.map((log, index) => {
-              const isErr = log.toLowerCase().includes('error') || log.toLowerCase().includes('critical');
-              const isSuccess = log.includes('Successfully') || log.includes('Saved:') || log.includes('initialized');
+              const isErr = isErrorLine(log);
+              const isSuccess = /Successfully|Saved:|saved:|verified|initialized/.test(log);
               return (
-                <div 
-                  key={index} 
-                  className={`leading-relaxed ${isErr ? 'text-red-400 font-bold' : isSuccess ? 'text-emerald-400' : 'text-gray-300'}`}
-                >
-                  <span className="opacity-40 mr-2">[{index + 1}]</span>
-                  <span>{log}</span>
+                <div key={index} className={`whitespace-pre-wrap break-words ${isErr ? 'text-red-300' : isSuccess ? 'text-emerald-300' : 'text-gray-300'}`}>
+                  {log}
                 </div>
               );
             })
           ) : (
-            <div className="text-gray-500 italic py-10 text-center">No log messages found for this filter.</div>
+            <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-500 font-sans text-[13px]">
+              <ScrollText size={28} className="opacity-50" style={{ color: accentColor }} />
+              <span>{filter === 'errors' ? 'No errors.' : 'Nothing logged yet. Start a download and its progress shows up here.'}</span>
+            </div>
           )}
         </div>
       </div>
@@ -2342,23 +2260,27 @@ function LogView({ theme, activeSection, setActiveView }: any) {
 // -------------------------------------------------------------
 function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: any) {
   const [logs, setLogs] = useState<string[]>([]);
-  const [isDone, setIsDone] = useState(false);
+  const [status, setStatus] = useState<'running' | 'done' | 'failed'>('running');
 
   useEffect(() => {
     // Stops once the update is done: it used to keep polling and re-ran a forced GitHub update check
     // every half second for as long as this view stayed open.
-    let done = false;
+    let finished = false;
     const interval = setInterval(() => {
-      if (done || document.hidden) return;
+      if (finished || document.hidden) return;
       fetch('/api/logs').then(r => r.json()).then(d => {
-        if (done || !Array.isArray(d)) return;
+        if (finished || !Array.isArray(d)) return;
         setLogs(d);
-        if (d.some(l => l.includes('Update cycle finished.') || l.includes('Process Finished Successfully!'))) {
-          done = true;
+        const failed = d.some(l => typeof l === 'string' && l.startsWith('CRITICAL ERROR:'));
+        const done = d.some(l => l.includes('Update cycle finished.') || l.includes('Process Finished Successfully!'));
+        if (failed || done) {
+          finished = true;
           clearInterval(interval);
-          setIsDone(true);
-          setUpdateAvailable(false);
-          checkUpdates(true);
+          setStatus(failed ? 'failed' : 'done');
+          if (done) {
+            setUpdateAvailable(false);
+            checkUpdates(true);
+          }
         }
       }).catch(() => {});
     }, 500);
@@ -2366,99 +2288,81 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex flex-col justify-between" style={{ backgroundColor: theme.panelOuter }}>
-      <div>
-        <h2 className="text-[24px] font-bold text-white mb-2">Engine Updater Pipeline</h2>
-        <p className="text-xs text-gray-400 mb-4">Fetching the latest upstream `yt-dlp` core binaries and dependencies...</p>
+  const updatedLine = logs.find(l => /Updated yt-dlp to|is up to date/i.test(l));
+  const summary = status === 'running'
+    ? 'Checking for a newer yt-dlp and installing it…'
+    : status === 'failed'
+      ? 'The update stopped with an error. The log below says why.'
+      : updatedLine
+        ? updatedLine.replace(/^\[\w+\]\s*/, '')
+        : 'Update finished.';
 
-        <div className="w-full h-[410px] p-4 rounded-card bg-black/70 border border-white/10 font-mono text-xs overflow-y-auto custom-scrollbar flex flex-col gap-1 shadow-inner select-text">
+  return (
+    <div className="w-[1050px] h-[580px] rounded-panel shadow-2xl p-6 flex" style={{ backgroundColor: theme.panelOuter }}>
+      <div className="flex-1 rounded-card p-6 flex flex-col gap-4 min-w-0" style={{ backgroundColor: theme.panelInner }}>
+        <PanelTitle>Updating yt-dlp</PanelTitle>
+
+        <div className="flex items-center gap-3 px-4 py-3 rounded-control bg-white/[0.04] border border-white/[0.06] -mt-2">
+          {status === 'running' && <LoaderCircle size={20} className="animate-spin shrink-0" style={{ color: theme.accent }} />}
+          {status === 'done' && <CircleCheck size={20} className="text-emerald-400 shrink-0" />}
+          {status === 'failed' && <TriangleAlert size={20} className="text-red-400 shrink-0" />}
+          <span className="text-[14px] text-[#D9D9D9]">{summary}</span>
+        </div>
+
+        <div className="flex-1 min-h-0 px-4 py-3 rounded-control bg-[#17171d] border border-white/[0.06] font-mono text-[12px] leading-relaxed overflow-y-auto custom-scrollbar select-text">
           {logs.map((log, i) => (
-            <div key={i} className="text-gray-300">
-              <span className="opacity-40 mr-2">[{i + 1}]</span>
-              <span>{log}</span>
-            </div>
+            <div key={i} className={`whitespace-pre-wrap break-words ${/error|failed/i.test(log) ? 'text-red-300' : 'text-gray-300'}`}>{log}</div>
           ))}
         </div>
-      </div>
 
-      <div className="flex justify-end pt-2">
-        <button 
-          onClick={() => setActiveView('main')}
-          disabled={!isDone}
-          className="py-3 px-8 rounded-control font-bold text-sm uppercase tracking-wider text-white bg-white/10 hover:bg-white/20 disabled:opacity-40 transition-all"
-        >
-          {isDone ? 'Return to Downloader' : 'Updating in Progress...'}
-        </button>
+        <div className="flex justify-end">
+          <button
+            onClick={() => setActiveView('main')}
+            disabled={status === 'running'}
+            className={buttonPrimary}
+            style={{ backgroundColor: status === 'running' ? '#2a2b36' : theme.accent }}
+          >
+            {status === 'running' ? 'Updating…' : 'Back to the downloader'}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 // -------------------------------------------------------------
-// PRENAME MODAL
+// RENAME DIALOG: file name for the next download
 // -------------------------------------------------------------
 function PrenameView({ theme, setActiveView, customName, setCustomName }: any) {
   const [tempName, setTempName] = useState(customName);
+  const close = () => setActiveView('main');
 
   const handleSave = () => {
     setCustomName(tempName.trim());
-    setActiveView('main');
+    close();
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md px-4 pointer-events-auto"
-    >
-      <motion.div 
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="w-full max-w-[500px] p-7 rounded-panel shadow-2xl flex flex-col gap-5 relative border border-white/10"
-        style={{ backgroundColor: theme.panelOuter, color: theme.textMain }}
-      >
-        <button 
-          onClick={() => setActiveView('main')}
-          className="absolute top-5 right-5 hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"
-        >
-          <X size={20} />
+    <Modal title="File name" icon={<PenLine size={20} />} accent={theme.accent} onClose={close}>
+      <p className="text-[13px] text-gray-400 -mt-1">Used for the next download only. The extension (.mp3, .mp4 …) is added for you.</p>
+      <input
+        type="text"
+        value={tempName}
+        onChange={e => setTempName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+        placeholder="e.g. Summer mix 2026"
+        aria-label="File name"
+        className={`${fieldClass} text-[15px] py-3`}
+        autoFocus
+      />
+      <div className="flex gap-3">
+        <button onClick={handleSave} className={`${buttonPrimary} flex-1`} style={{ backgroundColor: theme.accent }}>
+          Save
         </button>
-
-        <div className="flex items-center gap-2.5">
-          <PenLine size={20} style={{ color: theme.accent }} />
-          <h3 className="text-xl font-bold text-white">Prename Output File</h3>
-        </div>
-
-        <p className="text-xs text-gray-400">Specify a custom name for your next downloaded audio or video file without extension:</p>
-
-        <input 
-          type="text"
-          value={tempName}
-          onChange={e => setTempName(e.target.value)}
-          placeholder="e.g. Favorite_Song_Remix_2026..."
-          className="w-full px-4 py-3 rounded-control bg-black/50 border border-white/15 text-sm text-white font-medium outline-none shadow-inner"
-          autoFocus
-        />
-
-        <div className="flex gap-3 mt-2">
-          <button 
-            onClick={handleSave}
-            className="flex-1 py-3 rounded-control font-bold text-sm uppercase tracking-wider text-white shadow-lg transition-all active:scale-[0.98]"
-            style={{ backgroundColor: theme.accent, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 0 #99001b` }}
-          >
-            Apply Name
-          </button>
-          <button 
-            onClick={() => { setCustomName(''); setActiveView('main'); }}
-            className="px-4 py-3 rounded-control font-bold text-sm text-gray-400 hover:text-white border border-white/10 hover:bg-white/5 transition-all"
-          >
-            Clear
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+        <button onClick={() => { setCustomName(''); close(); }} className={buttonSecondary} title="Name the file after the video's title">
+          Use video title
+        </button>
+      </div>
+    </Modal>
   );
 }
