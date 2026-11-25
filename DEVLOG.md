@@ -68,6 +68,18 @@ All future releases and updates for this project **MUST** adhere to the **Semant
 
 ## 📜 Release History & Changelog
 
+### **Unreleased** (2026-11-25) - *Robustness pass from `Lessons-from-Blur-AutoClicker.md`*
+- **One copy per data folder**: a named mutex `Local\LevisDownloader-<hash of %APPDATA%\LeviDownloader>` is claimed at start; a second launch brings the running window forward and quits. The dev edition uses the same data folder and port, so the two can't run side by side either.
+- **Stop really stops**: Stop no longer logs "Process Finished Successfully!", ends yt-dlp together with its aria2c/ffmpeg children, and can't restart the download through the aria2c fallback (downloads and updates now carry a run number). Closing the window stops a running download.
+- **Failures say why**: a failed download no longer reports success; it ends with `CRITICAL ERROR: <reason>`, which the error popup shows. Crashes go to the UI and to `errors.log`.
+- **Saving**: settings and history are written via a temp file; briefly locked files are retried; a settings file that stays locked is never overwritten with defaults (the change is kept in memory and logged); damaged JSON is kept as `*.corrupt`; history is never replaced when unreadable.
+- **`errors.log`** in `%APPDATA%\LeviDownloader`, capped at 64 KB.
+- **Limits in one place**: settings are checked on load and save; download requests are checked (format, quality, playlist flag, file name) and refused with a one-line reason. URLs starting with `-` are refused (yt-dlp would read them as options) and file names are stripped of Windows-illegal characters.
+- **Less polling**: log polls skip their work while the window is minimised; the update screen stops polling when done, and shows a failed update instead of waiting forever.
+- **Tests**: `python -m unittest discover -s app_backend/tests -v` (17 tests; temp folders and a fake yt-dlp, nothing touches real data).
+- **Not applicable here**: verifying downloaded tools (this edition never downloads yt-dlp/FFmpeg itself; `yt-dlp -U` verifies its own update).
+- **Not checked**: the real app window and a real download.
+
 ### **v1.0.5** (2026-09-29)
 - **UI & Aesthetics**: Replaced standard white Windows OS `<select>` / `<option>` dropdown menus with custom tactile dark Obsidian Glass dropdown components (`CustomDropdown.tsx`).
 - **Interaction**: Added smooth animations, keyboard navigation, and responsive dropdown popovers matching the application's dark aesthetic.

@@ -56,7 +56,8 @@ export default function App() {
   const [url, setUrl] = useState('');
   const [customName, setCustomName] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState(false);
+  // false, true (failed, no details) or the one-line reason the backend gave
+  const [downloadError, setDownloadError] = useState<boolean | string>(false);
   
   const [playlistMode, setPlaylistMode] = useState(false);
   const [showPlaylistPopup, setShowPlaylistPopup] = useState(false);
@@ -177,7 +178,7 @@ export default function App() {
       });
       const data = await response.json();
       if (!data.success) {
-        setDownloadError(true);
+        setDownloadError(data.error || true);
         setIsDownloading(false);
       }
     } catch (error) {
@@ -408,7 +409,7 @@ export default function App() {
                 </div>
                 <button onClick={() => setDownloadError(false)} className="hover:opacity-100 opacity-60 p-1 transition-opacity bg-white/5 hover:bg-white/10 rounded-full"><X size={18} /></button>
               </div>
-              <p className="text-sm font-medium relative z-10 w-[240px] leading-relaxed" style={{ color: theme.textSecondary }}>The download encountered an error. Please try updating the tool and downloading again.</p>
+              <p className="text-sm font-medium relative z-10 w-[240px] leading-relaxed" style={{ color: theme.textSecondary }}>{typeof downloadError === 'string' ? downloadError : 'The download encountered an error. Please try updating the tool and downloading again.'}</p>
               <button
                  onClick={() => { setDownloadError(false); handleUpdate(); }}
                  className="mt-2 font-bold py-2.5 px-4 rounded-2xl transition-all active:translate-y-[2px]"
@@ -447,6 +448,17 @@ export default function App() {
   );
 }
 
+// The newest "CRITICAL ERROR: ..." line from the backend log, as a one-line reason for the error popup
+function criticalErrorReason(logs: unknown[]): string | true {
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const l = logs[i];
+    if (typeof l === 'string' && l.startsWith('CRITICAL ERROR:')) {
+      return l.slice('CRITICAL ERROR:'.length).trim() || true;
+    }
+  }
+  return true;
+}
+
 function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDownload, isDownloading, setIsDownloading, changeDownloadFolder, handleUpdate, setDownloadError, customName, setCustomName, fetchHistory, updateAvailable, updateInfo, showUpdatePopup, setShowUpdatePopup }: any) {
   const [progress, setProgress] = useState(0);
   const [downloadTitle, setDownloadTitle] = useState('Preparing...');
@@ -465,6 +477,7 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
     }
 
     const interval = setInterval(() => {
+      if (document.hidden) return; // nothing to show while the window is minimised
       fetch('/api/logs').then(r => r.json()).then(logs => {
         if (!Array.isArray(logs)) return;
 
@@ -474,7 +487,7 @@ function MainView({ url, setUrl, theme, playlistMode, setActiveView, startRealDo
 
         if (isDone || isError) {
             setIsDownloading(false);
-            if (isError) setDownloadError(true);
+            if (isError) setDownloadError(criticalErrorReason(logs));
             else setCustomName(''); // Wipe custom name on success
             fetchHistory();
             return;
@@ -658,7 +671,7 @@ function LogView({ theme }: { theme: any }) {
   useEffect(() => {
     const fetchLogs = () => { fetch('/api/logs').then(r => r.json()).then(d => { if (Array.isArray(d)) setLogs(d); }).catch(e => {}); };
     fetchLogs(); 
-    const interval = setInterval(fetchLogs, 1000);
+    const interval = setInterval(() => { if (!document.hidden) fetchLogs(); }, 1000);
     return () => clearInterval(interval);
   }, []);
   const filtered = logs.filter(l => l.toLowerCase().includes(search.toLowerCase()));
@@ -682,11 +695,18 @@ function LogView({ theme }: { theme: any }) {
 function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: { theme: any, setActiveView: (v: any) => void, checkUpdates?: (force?: boolean) => void, setUpdateAvailable?: (v: boolean) => void }) {
   const [logs, setLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
+    if (done || failed) return; // finished: stop polling
     const fetchLogs = () => {
+      if (document.hidden) return;
       fetch('/api/logs').then(r => r.json()).then(d => {
         if (Array.isArray(d)) {
           setLogs(d);
+          if (d.some(l => typeof l === 'string' && l.startsWith('CRITICAL ERROR:'))) {
+            setFailed(true);
+            return;
+          }
           if (!done && d.some(l => l.includes('Process Finished Successfully!'))) {
             setDone(true);
             if (setUpdateAvailable) setUpdateAvailable(false);
@@ -702,7 +722,7 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
     fetchLogs();
     const interval = setInterval(fetchLogs, 500);
     return () => clearInterval(interval);
-  }, [done, setActiveView, checkUpdates, setUpdateAvailable]);
+  }, [done, failed, setActiveView, checkUpdates, setUpdateAvailable]);
 
   return (
     <div className="w-[1050px] h-[600px] rounded-[24px] shadow-2xl p-6 flex flex-col mt-4" style={{ backgroundColor: theme.panelOuter }}>
@@ -712,7 +732,8 @@ function UpdateView({ theme, setActiveView, checkUpdates, setUpdateAvailable }: 
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2 custom-scrollbar">
           {logs.map((log, i) => (<div key={i} className="flex gap-4 opacity-90 animate-fade-in"><span style={{ color: theme.accent }}>{">"}</span><span style={{ color: theme.textMain }}>{log}</span></div>))}
           {done && (<div className="flex gap-4 opacity-90 animate-fade-in mt-4 text-green-400 font-bold"><span style={{ color: theme.accent }}>{">"}</span><span>Update successful! Returning to main menu...</span></div>)}
-          {!done && (<div className="flex gap-4 opacity-90 animate-fade-in mt-2"><span className="animate-pulse" style={{ color: theme.accent }}>_</span></div>)}
+          {failed && (<div className="flex gap-4 mt-4 font-bold" style={{ color: theme.accent }}><span>{">"}</span><span>The update stopped with an error (see above). Details are in errors.log.</span></div>)}
+          {!done && !failed && (<div className="flex gap-4 opacity-90 animate-fade-in mt-2"><span className="animate-pulse" style={{ color: theme.accent }}>_</span></div>)}
         </div>
       </div>
     </div>
